@@ -215,6 +215,46 @@ pub fn import_osv_ecosystem(
 }
 
 // ---------------------------------------------------------------------------
+// VulnSource implementation
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "db-admin")]
+use super::VulnSource;
+
+#[cfg(feature = "db-admin")]
+pub struct OsvSource;
+
+#[cfg(feature = "db-admin")]
+impl VulnSource for OsvSource {
+    fn name(&self) -> &str { "osv" }
+
+    fn import(
+        &self,
+        store: &mut VulnStore,
+        ecosystem: Option<&str>,
+    ) -> Result<usize, crate::error::DatabaseError> {
+        match ecosystem {
+            Some(eco) => {
+                eprintln!("osv: importing {}...", eco);
+                let count = import_osv_ecosystem(store, eco)?;
+                eprintln!("osv: {} — {} vulnerabilities", eco, count);
+                Ok(count)
+            }
+            None => {
+                let mut total = 0;
+                for eco in super::ALL_ECOSYSTEMS {
+                    eprintln!("osv: importing {}...", eco);
+                    let count = import_osv_ecosystem(store, eco)?;
+                    eprintln!("osv: {} — {} vulnerabilities", eco, count);
+                    total += count;
+                }
+                Ok(total)
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -332,5 +372,12 @@ mod tests {
         // Open-ended range — no fixed version.
         assert_eq!(pkg.ranges[0].introduced, Some("2.0.0".to_string()));
         assert!(pkg.ranges[0].fixed.is_none());
+    }
+
+    #[cfg(feature = "db-admin")]
+    #[test]
+    fn test_osv_source_name() {
+        let source = OsvSource;
+        assert_eq!(source.name(), "osv");
     }
 }

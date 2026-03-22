@@ -80,9 +80,9 @@ enum DbCommands {
     /// Build a vulnerability database from a local OSV data directory.
     #[cfg(feature = "db-admin")]
     Build {
-        /// Ecosystem to build the database for.
-        #[arg(long, default_value = "Go")]
-        ecosystem: String,
+        /// Ecosystem to import (default: all). Values: Go, npm, PyPI, Maven
+        #[arg(long)]
+        ecosystem: Option<String>,
 
         /// Write the resulting database to this path.
         #[arg(short, long)]
@@ -134,7 +134,7 @@ fn main() -> Result<()> {
 
             #[cfg(feature = "db-admin")]
             DbCommands::Build { ecosystem, output } => {
-                cmd_db_build(&ecosystem, output.as_deref())
+                cmd_db_build(ecosystem.as_deref(), output.as_deref())
             }
 
             #[cfg(feature = "db-admin")]
@@ -253,7 +253,8 @@ fn cmd_db_update_impl(_registry: &str, _db_path: &std::path::Path) -> Result<()>
 }
 
 #[cfg(feature = "db-admin")]
-fn cmd_db_build(ecosystem: &str, output: Option<&std::path::Path>) -> Result<()> {
+fn cmd_db_build(ecosystem: Option<&str>, output: Option<&std::path::Path>) -> Result<()> {
+    use looking_glass::db::{normalize_ecosystem, vuln_sources};
     use looking_glass::db::store::VulnStore;
 
     let db_path = output
@@ -265,19 +266,36 @@ fn cmd_db_build(ecosystem: &str, output: Option<&std::path::Path>) -> Result<()>
             .with_context(|| format!("Failed to create directory '{}'", parent.display()))?;
     }
 
+    // Normalize ecosystem if provided
+    let ecosystem = match ecosystem {
+        Some(eco) => {
+            let normalized = normalize_ecosystem(eco)
+                .ok_or_else(|| anyhow::anyhow!(
+                    "Unknown ecosystem: '{}'. Supported: Go, npm, PyPI, Maven", eco
+                ))?;
+            Some(normalized)
+        }
+        None => None,
+    };
+
     eprintln!(
-        "Building vulnerability database for ecosystem '{}' at {} …",
-        ecosystem,
+        "Building vulnerability database at {} …",
         db_path.display()
     );
 
     let db_str = db_path.to_string_lossy();
     let mut store =
         VulnStore::open(&db_str).context("Failed to open vulnerability database")?;
-    let count = looking_glass::db::osv::import_osv_ecosystem(&mut store, ecosystem)
-        .context("Failed to import OSV data")?;
-    eprintln!("Built database with {} vulnerabilities.", count);
 
+    let mut total = 0;
+    for source in vuln_sources() {
+        match source.import(&mut store, ecosystem) {
+            Ok(count) => total += count,
+            Err(e) => eprintln!("Warning: {} import failed: {}", source.name(), e),
+        }
+    }
+
+    eprintln!("Built database with {} total vulnerabilities.", total);
     Ok(())
 }
 
