@@ -119,12 +119,17 @@ pub fn pull_and_extract_image(reference_str: &str) -> Result<Vec<FileEntry>, Oci
         let client = Client::new(config);
 
         let accepted_media_types = vec![
+            // Manifest types
             oci_distribution::manifest::IMAGE_MANIFEST_MEDIA_TYPE,
             oci_distribution::manifest::IMAGE_MANIFEST_LIST_MEDIA_TYPE,
             oci_distribution::manifest::OCI_IMAGE_MEDIA_TYPE,
             oci_distribution::manifest::OCI_IMAGE_INDEX_MEDIA_TYPE,
+            // OCI layer types
             oci_distribution::manifest::IMAGE_LAYER_GZIP_MEDIA_TYPE,
             oci_distribution::manifest::IMAGE_LAYER_MEDIA_TYPE,
+            // Docker layer types (used by Docker Hub images)
+            oci_distribution::manifest::IMAGE_DOCKER_LAYER_GZIP_MEDIA_TYPE,
+            oci_distribution::manifest::IMAGE_DOCKER_LAYER_TAR_MEDIA_TYPE,
         ];
 
         let image_data = client

@@ -82,19 +82,50 @@ fn contains_subsequence(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|w| w == needle)
 }
 
-/// Finds the Go buildinfo magic marker in raw bytes, then extracts the
-/// human-readable text that follows it (up to the first null byte or end of data).
+/// Finds the Go buildinfo magic marker in raw bytes, then locates the
+/// embedded module info text (which starts with "path\t" or "mod\t")
+/// and extracts it up to the first null byte.
+///
+/// Go's buildinfo format has a structured header between the magic marker
+/// and the actual module text. The header contains flags, pointers, and
+/// the Go version string. We skip past it by searching for the text markers.
 pub fn extract_buildinfo_from_binary(bytes: &[u8]) -> Option<String> {
     let magic = GO_BUILDINFO_MAGIC;
     let pos = bytes.windows(magic.len()).position(|w| w == magic)?;
-    // The text section begins after the magic marker
-    let after_magic = &bytes[pos + magic.len()..];
-    // Find the end of the text block (null terminator or end of slice)
-    let text_bytes = match after_magic.iter().position(|&b| b == 0x00) {
-        Some(end) => &after_magic[..end],
-        None => after_magic,
-    };
-    String::from_utf8(text_bytes.to_vec()).ok()
+
+    // Search within a reasonable range after the magic (the header + text
+    // is typically within a few hundred bytes, but we allow up to 4KB)
+    let search_end = (pos + 4096).min(bytes.len());
+    let search_region = &bytes[pos..search_end];
+
+    // Find where the module info text starts (always begins with "path\t" or "mod\t")
+    let text_markers: &[&[u8]] = &[b"path\t", b"mod\t"];
+    let text_start = text_markers
+        .iter()
+        .filter_map(|marker| {
+            search_region
+                .windows(marker.len())
+                .position(|w| w == *marker)
+        })
+        .min()?;
+
+    let text_bytes = &search_region[text_start..];
+
+    // Read until we hit a null byte
+    let end = text_bytes
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(text_bytes.len());
+
+    // The region before the null may contain trailing non-UTF8 bytes
+    // (Go's encoding can place binary data after the text block).
+    // Use lossy conversion and trim to the last complete line.
+    let text = String::from_utf8_lossy(&text_bytes[..end]);
+    if let Some(last_newline) = text.rfind('\n') {
+        Some(text[..=last_newline].to_string())
+    } else {
+        Some(text.into_owned())
+    }
 }
 
 /// Parses the human-readable portion of a Go binary's build info.
@@ -384,11 +415,16 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 
     #[test]
     fn test_catalog_includes_binary_source() {
-        // Build a fake Go binary with embedded buildinfo
+        // Build a fake Go binary with embedded buildinfo (realistic format:
+        // magic → header bytes → "path\t..." text with deps)
         let mut bytes: Vec<u8> = vec![0x7f, 0x45, 0x4c, 0x46];
         bytes.extend_from_slice(&[0u8; 50]);
         bytes.extend_from_slice(GO_BUILDINFO_MAGIC);
-        bytes.extend_from_slice(b"dep\tgithub.com/some/lib\tv2.3.4\th1:xyz\n");
+        // Simulated header (flags, pointers, go version) before the text
+        bytes.extend_from_slice(&[0x08, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        bytes.extend_from_slice(b"go1.21.0");
+        bytes.extend_from_slice(&[0x00; 8]); // padding
+        bytes.extend_from_slice(b"path\texample.com/app\nmod\texample.com/app\tv1.0.0\t\ndep\tgithub.com/some/lib\tv2.3.4\th1:xyz\n");
         bytes.push(0x00); // null terminator
 
         let files = vec![binary_file("/usr/bin/myapp", bytes)];

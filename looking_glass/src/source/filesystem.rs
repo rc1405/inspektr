@@ -23,7 +23,21 @@ impl Source for FilesystemSource {
             });
         }
         let mut entries = Vec::new();
-        collect_files(&self.root, &mut entries)?;
+        if self.root.is_file() {
+            // Single file target (e.g., a binary)
+            let bytes = std::fs::read(&self.root)?;
+            let contents = if is_binary_content(&bytes) {
+                FileContents::Binary(bytes)
+            } else {
+                FileContents::Text(String::from_utf8_lossy(&bytes).into_owned())
+            };
+            entries.push(FileEntry {
+                path: self.root.clone(),
+                contents,
+            });
+        } else {
+            collect_files(&self.root, &mut entries)?;
+        }
         Ok(entries)
     }
 
@@ -142,5 +156,34 @@ mod tests {
 
         assert_eq!(files.len(), 1);
         assert!(files[0].is_binary());
+    }
+
+    #[test]
+    fn test_filesystem_source_single_file_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("app");
+        // ELF magic bytes (simulating a binary)
+        fs::write(&file_path, &[0x7f, 0x45, 0x4c, 0x46, 0x00, 0x00]).unwrap();
+
+        // Point directly at the file, not the directory
+        let source = FilesystemSource::new(file_path.clone());
+        let files = source.files().unwrap();
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, file_path);
+        assert!(files[0].is_binary());
+    }
+
+    #[test]
+    fn test_filesystem_source_single_text_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("go.mod");
+        fs::write(&file_path, "module example.com/app\n").unwrap();
+
+        let source = FilesystemSource::new(file_path.clone());
+        let files = source.files().unwrap();
+
+        assert_eq!(files.len(), 1);
+        assert!(files[0].as_text().unwrap().contains("module example.com/app"));
     }
 }
