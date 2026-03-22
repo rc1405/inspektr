@@ -1,0 +1,27 @@
+[package]
+name = "looking_glass"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+db-admin = ["dep:zip"]
+
+[dependencies]
+goblin = "0.9"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+semver = { version = "1", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+zip = { version = "2", optional = true }
+reqwest = { version = "0.12", features = ["blocking"] }
+oci-distribution = "0.11"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+flate2 = "1"
+tar = "0.4"
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"

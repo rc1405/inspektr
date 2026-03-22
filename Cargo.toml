@@ -1,0 +1,3 @@
+[workspace]
+members = ["looking_glass", "looking_glass_cli"]
+resolver = "3"
