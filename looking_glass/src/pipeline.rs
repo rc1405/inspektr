@@ -70,7 +70,7 @@ pub fn generate_sbom(target: &str) -> Result<Sbom, LookingGlassError> {
 
 /// Generate an SBOM and encode it in the requested format.
 ///
-/// `format` should be `"cyclonedx"` (the only currently supported format).
+/// `format` should be `"cyclonedx"` or `"spdx"`.
 pub fn generate_sbom_bytes(target: &str, format: &str) -> Result<Vec<u8>, LookingGlassError> {
     let sbom = generate_sbom(target)?;
     let formatter = select_format(format)?;
@@ -112,9 +112,10 @@ pub fn scan_vulnerabilities(
 fn select_format(format: &str) -> Result<Box<dyn SbomFormat>, LookingGlassError> {
     match format {
         "cyclonedx" => Ok(Box::new(CycloneDxFormat)),
+        "spdx" => Ok(Box::new(crate::sbom::spdx::SpdxFormat)),
         other => Err(LookingGlassError::SbomFormat(
             crate::error::SbomFormatError::EncodeFailed(format!(
-                "unsupported SBOM format: {}",
+                "unsupported SBOM format: {}; supported formats are: cyclonedx, spdx",
                 other
             )),
         )),
@@ -214,5 +215,30 @@ mod tests {
         let packages = run_catalogers(&files);
         assert_eq!(packages.len(), 1);
         assert_eq!(packages[0].ecosystem, Ecosystem::Java);
+    }
+
+    #[test]
+    fn test_run_catalogers_mixed_ecosystems_spdx_roundtrip() {
+        use crate::sbom::SbomFormat;
+        let go_mod = FileEntry {
+            path: PathBuf::from("/project/go.mod"),
+            contents: FileContents::Text(
+                "module example.com/app\n\ngo 1.21\n\nrequire github.com/pkg/errors v0.9.1\n"
+                    .to_string(),
+            ),
+        };
+        let packages = run_catalogers(&[go_mod]);
+        let sbom = Sbom {
+            source: crate::models::SourceMetadata {
+                source_type: "filesystem".to_string(),
+                target: "/project".to_string(),
+            },
+            packages,
+        };
+        let formatter = crate::sbom::spdx::SpdxFormat;
+        let encoded = formatter.encode(&sbom).unwrap();
+        let decoded = formatter.decode(&encoded).unwrap();
+        assert_eq!(decoded.packages.len(), 1);
+        assert_eq!(decoded.packages[0].name, "github.com/pkg/errors");
     }
 }

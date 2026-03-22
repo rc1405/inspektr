@@ -1,4 +1,5 @@
 pub mod cyclonedx;
+pub mod spdx;
 
 use crate::error::SbomFormatError;
 use crate::models::Sbom;
