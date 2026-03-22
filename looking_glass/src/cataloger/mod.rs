@@ -1,7 +1,14 @@
+pub mod conan;
+pub mod dotnet;
 pub mod golang;
 pub mod java;
 pub mod javascript;
+pub mod php;
 pub mod python;
+pub mod ruby;
+pub mod rust_lang;
+pub mod swift;
+pub mod vcpkg;
 
 use crate::error::CatalogerError;
 use crate::models::{FileEntry, Package};

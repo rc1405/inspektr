@@ -24,7 +24,10 @@ pub trait VulnSource {
 
 /// All known ecosystem strings (canonical form).
 #[cfg(feature = "db-admin")]
-pub const ALL_ECOSYSTEMS: &[&str] = &["Go", "npm", "PyPI", "Maven"];
+pub const ALL_ECOSYSTEMS: &[&str] = &[
+    "Go", "npm", "PyPI", "Maven",
+    "ConanCenter", "NuGet", "Packagist", "crates.io", "RubyGems", "SwiftURL",
+];
 
 /// Normalize an ecosystem string to canonical form (case-insensitive match).
 #[cfg(feature = "db-admin")]

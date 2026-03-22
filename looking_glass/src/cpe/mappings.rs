@@ -26,6 +26,30 @@ pub fn resolve_by_target_sw(fields: &CpeFields) -> Option<ResolvedCpe> {
             ecosystem: "Go".to_string(),
             package_name: format!("{}/{}", fields.vendor, fields.product),
         }),
+        "c" | "c++" | "conan" => Some(ResolvedCpe {
+            ecosystem: "ConanCenter".to_string(),
+            package_name: fields.product.clone(),
+        }),
+        "php" | "composer" => Some(ResolvedCpe {
+            ecosystem: "Packagist".to_string(),
+            package_name: fields.product.clone(),
+        }),
+        "rust" | "cargo" => Some(ResolvedCpe {
+            ecosystem: "crates.io".to_string(),
+            package_name: fields.product.clone(),
+        }),
+        "ruby" | "rubygems" => Some(ResolvedCpe {
+            ecosystem: "RubyGems".to_string(),
+            package_name: fields.product.clone(),
+        }),
+        ".net" | "nuget" | "dotnet" => Some(ResolvedCpe {
+            ecosystem: "NuGet".to_string(),
+            package_name: fields.product.clone(),
+        }),
+        "swift" => Some(ResolvedCpe {
+            ecosystem: "SwiftURL".to_string(),
+            package_name: fields.product.clone(),
+        }),
         _ => None,
     }
 }

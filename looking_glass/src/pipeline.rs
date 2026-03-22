@@ -3,6 +3,13 @@ use crate::cataloger::golang::GoCataloger;
 use crate::cataloger::javascript::JavaScriptCataloger;
 use crate::cataloger::python::PythonCataloger;
 use crate::cataloger::java::JavaCataloger;
+use crate::cataloger::conan::ConanCataloger;
+use crate::cataloger::vcpkg::VcpkgCataloger;
+use crate::cataloger::dotnet::DotNetCataloger;
+use crate::cataloger::php::PhpCataloger;
+use crate::cataloger::rust_lang::RustCataloger;
+use crate::cataloger::ruby::RubyCataloger;
+use crate::cataloger::swift::SwiftCataloger;
 use crate::cataloger::Cataloger;
 use crate::db::store::VulnStore;
 use crate::error::LookingGlassError;
@@ -22,6 +29,13 @@ fn catalogers() -> Vec<Box<dyn Cataloger>> {
         Box::new(JavaScriptCataloger),
         Box::new(PythonCataloger),
         Box::new(JavaCataloger),
+        Box::new(ConanCataloger),
+        Box::new(VcpkgCataloger),
+        Box::new(DotNetCataloger),
+        Box::new(PhpCataloger),
+        Box::new(RustCataloger),
+        Box::new(RubyCataloger),
+        Box::new(SwiftCataloger),
     ]
 }
 
@@ -260,6 +274,58 @@ mod tests {
         let packages = run_catalogers(&files);
         assert_eq!(packages.len(), 1);
         assert_eq!(packages[0].ecosystem, Ecosystem::Java);
+    }
+
+    #[test]
+    fn test_run_catalogers_rust() {
+        let content = "[[package]]\nname = \"serde\"\nversion = \"1.0.193\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\n";
+        let files = vec![FileEntry {
+            path: PathBuf::from("/project/Cargo.lock"),
+            contents: FileContents::Text(content.to_string()),
+        }];
+        let packages = run_catalogers(&files);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "serde");
+        assert_eq!(packages[0].ecosystem, Ecosystem::Rust);
+    }
+
+    #[test]
+    fn test_run_catalogers_php() {
+        let content = r#"{"packages":[{"name":"monolog/monolog","version":"3.5.0"}],"packages-dev":[]}"#;
+        let files = vec![FileEntry {
+            path: PathBuf::from("/project/composer.lock"),
+            contents: FileContents::Text(content.to_string()),
+        }];
+        let packages = run_catalogers(&files);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "monolog/monolog");
+        assert_eq!(packages[0].ecosystem, Ecosystem::Php);
+    }
+
+    #[test]
+    fn test_run_catalogers_ruby() {
+        let content = "GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (7.1.2)\n\nPLATFORMS\n  ruby\n";
+        let files = vec![FileEntry {
+            path: PathBuf::from("/project/Gemfile.lock"),
+            contents: FileContents::Text(content.to_string()),
+        }];
+        let packages = run_catalogers(&files);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "rails");
+        assert_eq!(packages[0].ecosystem, Ecosystem::Ruby);
+    }
+
+    #[test]
+    fn test_run_catalogers_dotnet() {
+        let content = r#"{"version":1,"dependencies":{"net8.0":{"Newtonsoft.Json":{"resolved":"13.0.3"}}}}"#;
+        let files = vec![FileEntry {
+            path: PathBuf::from("/project/packages.lock.json"),
+            contents: FileContents::Text(content.to_string()),
+        }];
+        let packages = run_catalogers(&files);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "Newtonsoft.Json");
+        assert_eq!(packages[0].ecosystem, Ecosystem::DotNet);
     }
 
     #[test]

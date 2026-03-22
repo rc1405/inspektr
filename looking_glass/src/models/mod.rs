@@ -49,6 +49,13 @@ pub enum Ecosystem {
     JavaScript,
     Python,
     Java,
+    Conan,
+    Vcpkg,
+    DotNet,
+    Php,
+    Rust,
+    Ruby,
+    Swift,
 }
 
 impl Ecosystem {
@@ -58,6 +65,13 @@ impl Ecosystem {
             Ecosystem::JavaScript => "npm",
             Ecosystem::Python => "PyPI",
             Ecosystem::Java => "Maven",
+            Ecosystem::Conan => "ConanCenter",
+            Ecosystem::Vcpkg => "vcpkg",
+            Ecosystem::DotNet => "NuGet",
+            Ecosystem::Php => "Packagist",
+            Ecosystem::Rust => "crates.io",
+            Ecosystem::Ruby => "RubyGems",
+            Ecosystem::Swift => "SwiftURL",
         }
     }
 }
@@ -90,6 +104,13 @@ impl Package {
                 let purl_name = self.name.replace(':', "/");
                 format!("pkg:maven/{}@{}", purl_name, self.version)
             }
+            Ecosystem::Conan => format!("pkg:conan/{}@{}", self.name, self.version),
+            Ecosystem::Vcpkg => format!("pkg:vcpkg/{}@{}", self.name, self.version),
+            Ecosystem::DotNet => format!("pkg:nuget/{}@{}", self.name, self.version),
+            Ecosystem::Php => format!("pkg:composer/{}@{}", self.name, self.version),
+            Ecosystem::Rust => format!("pkg:cargo/{}@{}", self.name, self.version),
+            Ecosystem::Ruby => format!("pkg:gem/{}@{}", self.name, self.version),
+            Ecosystem::Swift => format!("pkg:swift/{}@{}", self.name, self.version),
         }
     }
 }
@@ -239,5 +260,57 @@ mod tests {
             source_file: None,
         };
         assert_eq!(pkg.to_purl(), "pkg:maven/org.apache.commons/commons-lang3@3.14.0");
+    }
+
+    #[test]
+    fn test_new_ecosystem_osv_names() {
+        assert_eq!(Ecosystem::Conan.as_osv_ecosystem(), "ConanCenter");
+        assert_eq!(Ecosystem::Vcpkg.as_osv_ecosystem(), "vcpkg");
+        assert_eq!(Ecosystem::DotNet.as_osv_ecosystem(), "NuGet");
+        assert_eq!(Ecosystem::Php.as_osv_ecosystem(), "Packagist");
+        assert_eq!(Ecosystem::Rust.as_osv_ecosystem(), "crates.io");
+        assert_eq!(Ecosystem::Ruby.as_osv_ecosystem(), "RubyGems");
+        assert_eq!(Ecosystem::Swift.as_osv_ecosystem(), "SwiftURL");
+    }
+
+    #[test]
+    fn test_new_ecosystem_purls() {
+        let make_pkg = |name: &str, version: &str, ecosystem: Ecosystem| Package {
+            name: name.to_string(),
+            version: version.to_string(),
+            ecosystem,
+            purl: String::new(),
+            metadata: HashMap::new(),
+            source_file: None,
+        };
+
+        assert_eq!(
+            make_pkg("zlib", "1.2.11", Ecosystem::Conan).to_purl(),
+            "pkg:conan/zlib@1.2.11"
+        );
+        assert_eq!(
+            make_pkg("zlib", "1.2.11", Ecosystem::Vcpkg).to_purl(),
+            "pkg:vcpkg/zlib@1.2.11"
+        );
+        assert_eq!(
+            make_pkg("Newtonsoft.Json", "13.0.3", Ecosystem::DotNet).to_purl(),
+            "pkg:nuget/Newtonsoft.Json@13.0.3"
+        );
+        assert_eq!(
+            make_pkg("monolog/monolog", "3.5.0", Ecosystem::Php).to_purl(),
+            "pkg:composer/monolog/monolog@3.5.0"
+        );
+        assert_eq!(
+            make_pkg("serde", "1.0.193", Ecosystem::Rust).to_purl(),
+            "pkg:cargo/serde@1.0.193"
+        );
+        assert_eq!(
+            make_pkg("rails", "7.1.2", Ecosystem::Ruby).to_purl(),
+            "pkg:gem/rails@7.1.2"
+        );
+        assert_eq!(
+            make_pkg("github.com/apple/swift-nio", "2.62.0", Ecosystem::Swift).to_purl(),
+            "pkg:swift/github.com/apple/swift-nio@2.62.0"
+        );
     }
 }

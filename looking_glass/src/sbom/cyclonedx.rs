@@ -73,6 +73,20 @@ impl SbomFormat for CycloneDxFormat {
                     Ecosystem::Python
                 } else if comp.purl.starts_with("pkg:maven/") {
                     Ecosystem::Java
+                } else if comp.purl.starts_with("pkg:conan/") {
+                    Ecosystem::Conan
+                } else if comp.purl.starts_with("pkg:vcpkg/") {
+                    Ecosystem::Vcpkg
+                } else if comp.purl.starts_with("pkg:nuget/") {
+                    Ecosystem::DotNet
+                } else if comp.purl.starts_with("pkg:composer/") {
+                    Ecosystem::Php
+                } else if comp.purl.starts_with("pkg:cargo/") {
+                    Ecosystem::Rust
+                } else if comp.purl.starts_with("pkg:gem/") {
+                    Ecosystem::Ruby
+                } else if comp.purl.starts_with("pkg:swift/") {
+                    Ecosystem::Swift
                 } else {
                     Ecosystem::Go // fallback
                 };

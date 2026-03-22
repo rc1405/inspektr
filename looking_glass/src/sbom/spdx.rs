@@ -152,6 +152,20 @@ fn ecosystem_from_purl(purl: &str) -> Ecosystem {
         Ecosystem::Python
     } else if purl.starts_with("pkg:maven/") {
         Ecosystem::Java
+    } else if purl.starts_with("pkg:conan/") {
+        Ecosystem::Conan
+    } else if purl.starts_with("pkg:vcpkg/") {
+        Ecosystem::Vcpkg
+    } else if purl.starts_with("pkg:nuget/") {
+        Ecosystem::DotNet
+    } else if purl.starts_with("pkg:composer/") {
+        Ecosystem::Php
+    } else if purl.starts_with("pkg:cargo/") {
+        Ecosystem::Rust
+    } else if purl.starts_with("pkg:gem/") {
+        Ecosystem::Ruby
+    } else if purl.starts_with("pkg:swift/") {
+        Ecosystem::Swift
     } else {
         Ecosystem::Go // fallback
     }
