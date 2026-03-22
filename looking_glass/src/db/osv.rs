@@ -311,6 +311,15 @@ mod tests {
     }
 
     #[test]
+    fn test_ecosystem_osv_names_are_valid() {
+        use crate::models::Ecosystem;
+        assert_eq!(Ecosystem::Go.as_osv_ecosystem(), "Go");
+        assert_eq!(Ecosystem::JavaScript.as_osv_ecosystem(), "npm");
+        assert_eq!(Ecosystem::Python.as_osv_ecosystem(), "PyPI");
+        assert_eq!(Ecosystem::Java.as_osv_ecosystem(), "Maven");
+    }
+
+    #[test]
     fn test_parse_osv_entry_no_severity() {
         let record = parse_osv_entry(SAMPLE_OSV_NO_SEVERITY).expect("should parse");
 

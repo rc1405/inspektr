@@ -1,13 +1,13 @@
 use crate::db::store::VulnStore;
-use crate::models::{Package, VulnerabilityMatch, Vulnerability};
+use crate::models::{Ecosystem, Package, VulnerabilityMatch, Vulnerability};
 use semver::Version;
 
 /// Match a single package against the vulnerability database.
 ///
 /// Strips a leading "v" from the version string before attempting semver
-/// parsing. Only SEMVER ranges are evaluated; ranges of other types are
-/// skipped. If the version cannot be parsed as semver the function returns
-/// an empty list.
+/// parsing. Both SEMVER and ECOSYSTEM range types are evaluated (ECOSYSTEM
+/// is used by npm, PyPI, and Maven in OSV). If the version cannot be parsed
+/// as semver the function returns an empty list.
 pub fn match_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityMatch> {
     let ecosystem = package.ecosystem.as_osv_ecosystem();
 
@@ -19,7 +19,13 @@ pub fn match_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityM
         Err(_) => return Vec::new(),
     };
 
-    let query_results = match store.query(ecosystem, &package.name) {
+    // Normalize package name for querying — PyPI uses lowercase names in OSV
+    let query_name = match package.ecosystem {
+        Ecosystem::Python => package.name.to_lowercase(),
+        _ => package.name.clone(),
+    };
+
+    let query_results = match store.query(ecosystem, &query_name) {
         Ok(r) => r,
         Err(_) => return Vec::new(),
     };
@@ -28,7 +34,9 @@ pub fn match_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityM
 
     for result in query_results {
         for range in &result.ranges {
-            if range.range_type != "SEMVER" {
+            // Accept both SEMVER and ECOSYSTEM range types — OSV uses ECOSYSTEM
+            // for npm, PyPI, and Maven while Go uses SEMVER
+            if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
                 continue;
             }
 

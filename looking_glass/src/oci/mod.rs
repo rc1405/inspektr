@@ -91,15 +91,25 @@ impl ImageReference {
         })
     }
 
-    /// Returns true if the string looks like an OCI image reference.
+    /// Returns true if the string looks like an OCI image reference (not a file path).
+    ///
+    /// Detection order per spec: the first segment (before the first `/`) must
+    /// contain a dot (registry hostname like `docker.io`, `ghcr.io`) or be
+    /// `localhost`. Paths like `test-fixtures/javascript/` or `./foo` are not
+    /// image references.
     pub fn looks_like_image_ref(s: &str) -> bool {
-        // Must contain at least one '/' after an optional registry prefix,
-        // or look like a well-known registry host.
-        // Simple heuristic: contains '/', ':', or '@' and doesn't start with '/'
-        if s.starts_with('/') || s.is_empty() {
+        if s.is_empty() || s.starts_with('/') || s.starts_with('.') {
             return false;
         }
-        s.contains('/') || s.contains('@') || s.contains(':')
+        if let Some(slash_pos) = s.find('/') {
+            let first_segment = &s[..slash_pos];
+            first_segment.contains('.') || first_segment == "localhost"
+        } else {
+            // No slash — could be a bare image name like "ubuntu" but
+            // we can't distinguish from a local directory name, so
+            // we require at least a tag or digest marker
+            s.contains('@')
+        }
     }
 }
 
@@ -212,13 +222,18 @@ mod tests {
 
     #[test]
     fn test_looks_like_image_ref() {
+        // Registry with dot in hostname
         assert!(ImageReference::looks_like_image_ref("ghcr.io/myorg/myrepo:v1"));
-        assert!(ImageReference::looks_like_image_ref("myrepo:latest"));
-        assert!(ImageReference::looks_like_image_ref(
-            "myrepo@sha256:abc123"
-        ));
+        assert!(ImageReference::looks_like_image_ref("docker.io/library/golang:1.21"));
+        // Localhost
+        assert!(ImageReference::looks_like_image_ref("localhost/myrepo"));
+        // Bare name with digest
+        assert!(ImageReference::looks_like_image_ref("myrepo@sha256:abc123"));
+        // NOT image refs — these are filesystem paths
         assert!(!ImageReference::looks_like_image_ref("/absolute/path"));
         assert!(!ImageReference::looks_like_image_ref(""));
-        assert!(ImageReference::looks_like_image_ref("myorg/myrepo"));
+        assert!(!ImageReference::looks_like_image_ref("myorg/myrepo")); // no dot in first segment
+        assert!(!ImageReference::looks_like_image_ref("test-fixtures/javascript/"));
+        assert!(!ImageReference::looks_like_image_ref("./relative/path"));
     }
 }

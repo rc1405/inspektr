@@ -1,4 +1,7 @@
 pub mod golang;
+pub mod java;
+pub mod javascript;
+pub mod python;
 
 use crate::error::CatalogerError;
 use crate::models::{FileEntry, Package};

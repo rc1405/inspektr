@@ -30,18 +30,32 @@ mod tests {
 
     #[test]
     fn test_detect_oci_reference() {
-        // A string with a slash looks like an OCI image reference.
+        // Registry with dotted hostname
         assert_eq!(
             detect_target_type("ghcr.io/myorg/myrepo:v1.2.3"),
             TargetType::OciImage
         );
         assert_eq!(
-            detect_target_type("myrepo:latest"),
+            detect_target_type("docker.io/library/golang:1.21"),
             TargetType::OciImage
+        );
+        // Bare name with digest
+        assert_eq!(
+            detect_target_type("myrepo@sha256:abc123"),
+            TargetType::OciImage
+        );
+    }
+
+    #[test]
+    fn test_detect_relative_paths_not_oci() {
+        // Relative paths with slashes must NOT be detected as OCI refs
+        assert_eq!(
+            detect_target_type("test-fixtures/javascript/"),
+            TargetType::Filesystem
         );
         assert_eq!(
             detect_target_type("myorg/myrepo"),
-            TargetType::OciImage
+            TargetType::Filesystem
         );
     }
 

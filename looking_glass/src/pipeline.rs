@@ -1,5 +1,8 @@
 use std::path::Path;
 use crate::cataloger::golang::GoCataloger;
+use crate::cataloger::javascript::JavaScriptCataloger;
+use crate::cataloger::python::PythonCataloger;
+use crate::cataloger::java::JavaCataloger;
 use crate::cataloger::Cataloger;
 use crate::db::store::VulnStore;
 use crate::error::LookingGlassError;
@@ -14,7 +17,12 @@ use crate::vuln::matcher;
 
 /// Build the list of catalogers to run.
 fn catalogers() -> Vec<Box<dyn Cataloger>> {
-    vec![Box::new(GoCataloger)]
+    vec![
+        Box::new(GoCataloger),
+        Box::new(JavaScriptCataloger),
+        Box::new(PythonCataloger),
+        Box::new(JavaCataloger),
+    ]
 }
 
 /// Run every cataloger against `files`, collect all discovered packages.
@@ -167,5 +175,44 @@ mod tests {
             packages.is_empty(),
             "should find no packages for a plain markdown file"
         );
+    }
+
+    #[test]
+    fn test_run_catalogers_javascript() {
+        let content = r#"{"name":"app","lockfileVersion":3,"packages":{"node_modules/express":{"version":"4.18.2"}}}"#;
+        let files = vec![FileEntry {
+            path: PathBuf::from("/project/package-lock.json"),
+            contents: FileContents::Text(content.to_string()),
+        }];
+        let packages = run_catalogers(&files);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "express");
+        assert_eq!(packages[0].ecosystem, Ecosystem::JavaScript);
+    }
+
+    #[test]
+    fn test_run_catalogers_python() {
+        let files = vec![FileEntry {
+            path: PathBuf::from("/project/requirements.txt"),
+            contents: FileContents::Text("requests==2.31.0\n".to_string()),
+        }];
+        let packages = run_catalogers(&files);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "requests");
+        assert_eq!(packages[0].ecosystem, Ecosystem::Python);
+    }
+
+    #[test]
+    fn test_run_catalogers_java() {
+        let content = r#"<project><dependencies>
+            <dependency><groupId>org.foo</groupId><artifactId>bar</artifactId><version>1.0</version></dependency>
+        </dependencies></project>"#;
+        let files = vec![FileEntry {
+            path: PathBuf::from("/project/pom.xml"),
+            contents: FileContents::Text(content.to_string()),
+        }];
+        let packages = run_catalogers(&files);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].ecosystem, Ecosystem::Java);
     }
 }

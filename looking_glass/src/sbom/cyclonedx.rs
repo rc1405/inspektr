@@ -67,8 +67,14 @@ impl SbomFormat for CycloneDxFormat {
             .map(|comp| {
                 let ecosystem = if comp.purl.starts_with("pkg:golang/") {
                     Ecosystem::Go
+                } else if comp.purl.starts_with("pkg:npm/") {
+                    Ecosystem::JavaScript
+                } else if comp.purl.starts_with("pkg:pypi/") {
+                    Ecosystem::Python
+                } else if comp.purl.starts_with("pkg:maven/") {
+                    Ecosystem::Java
                 } else {
-                    Ecosystem::Go
+                    Ecosystem::Go // fallback
                 };
                 Package {
                     name: comp.name,

@@ -46,12 +46,18 @@ pub struct SourceMetadata {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Ecosystem {
     Go,
+    JavaScript,
+    Python,
+    Java,
 }
 
 impl Ecosystem {
     pub fn as_osv_ecosystem(&self) -> &'static str {
         match self {
             Ecosystem::Go => "Go",
+            Ecosystem::JavaScript => "npm",
+            Ecosystem::Python => "PyPI",
+            Ecosystem::Java => "Maven",
         }
     }
 }
@@ -70,6 +76,19 @@ impl Package {
     pub fn to_purl(&self) -> String {
         match self.ecosystem {
             Ecosystem::Go => format!("pkg:golang/{}@{}", self.name, self.version),
+            Ecosystem::JavaScript => {
+                // npm scoped packages: @scope/name → %40scope/name
+                let encoded = self.name.replace('@', "%40");
+                format!("pkg:npm/{}@{}", encoded, self.version)
+            }
+            Ecosystem::Python => {
+                format!("pkg:pypi/{}@{}", self.name.to_lowercase(), self.version)
+            }
+            Ecosystem::Java => {
+                // Maven coordinates: groupId:artifactId → groupId/artifactId
+                let purl_name = self.name.replace(':', "/");
+                format!("pkg:maven/{}@{}", purl_name, self.version)
+            }
         }
     }
 }
@@ -149,5 +168,68 @@ mod tests {
             contents: FileContents::Binary(vec![0x7f, 0x45, 0x4c, 0x46]),
         };
         assert!(entry.is_binary());
+    }
+
+    #[test]
+    fn test_ecosystem_javascript() {
+        assert_eq!(Ecosystem::JavaScript.as_osv_ecosystem(), "npm");
+    }
+
+    #[test]
+    fn test_ecosystem_python() {
+        assert_eq!(Ecosystem::Python.as_osv_ecosystem(), "PyPI");
+    }
+
+    #[test]
+    fn test_ecosystem_java() {
+        assert_eq!(Ecosystem::Java.as_osv_ecosystem(), "Maven");
+    }
+
+    #[test]
+    fn test_purl_javascript() {
+        let pkg = Package {
+            name: "express".to_string(),
+            version: "4.18.2".to_string(),
+            ecosystem: Ecosystem::JavaScript,
+            purl: String::new(),
+            metadata: HashMap::new(),
+        };
+        assert_eq!(pkg.to_purl(), "pkg:npm/express@4.18.2");
+    }
+
+    #[test]
+    fn test_purl_javascript_scoped() {
+        let pkg = Package {
+            name: "@types/node".to_string(),
+            version: "20.10.0".to_string(),
+            ecosystem: Ecosystem::JavaScript,
+            purl: String::new(),
+            metadata: HashMap::new(),
+        };
+        assert_eq!(pkg.to_purl(), "pkg:npm/%40types/node@20.10.0");
+    }
+
+    #[test]
+    fn test_purl_python() {
+        let pkg = Package {
+            name: "requests".to_string(),
+            version: "2.31.0".to_string(),
+            ecosystem: Ecosystem::Python,
+            purl: String::new(),
+            metadata: HashMap::new(),
+        };
+        assert_eq!(pkg.to_purl(), "pkg:pypi/requests@2.31.0");
+    }
+
+    #[test]
+    fn test_purl_java() {
+        let pkg = Package {
+            name: "org.apache.commons:commons-lang3".to_string(),
+            version: "3.14.0".to_string(),
+            ecosystem: Ecosystem::Java,
+            purl: String::new(),
+            metadata: HashMap::new(),
+        };
+        assert_eq!(pkg.to_purl(), "pkg:maven/org.apache.commons/commons-lang3@3.14.0");
     }
 }
