@@ -111,6 +111,8 @@ pub fn parse_osv_entry(json: &str) -> Result<VulnRecord, serde_json::Error> {
         published: entry.published,
         modified: entry.modified,
         withdrawn: entry.withdrawn,
+        source: "osv".to_string(),
+        cvss_score: None,
         affected,
     })
 }

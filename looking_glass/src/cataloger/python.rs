@@ -27,6 +27,7 @@ impl Cataloger for PythonCataloger {
             };
             for mut pkg in parsed {
                 pkg.metadata.insert("source".to_string(), source.clone());
+                pkg.source_file = Some(file.path.display().to_string());
                 let key = format!("{}@{}", pkg.name, pkg.version);
                 if seen.insert(key) { packages.push(pkg); }
             }
@@ -42,6 +43,7 @@ fn make_python_package(name: &str, version: &str) -> Package {
         ecosystem: Ecosystem::Python,
         purl: format!("pkg:pypi/{}@{}", normalized, version),
         metadata: HashMap::new(),
+        source_file: None,
     }
 }
 

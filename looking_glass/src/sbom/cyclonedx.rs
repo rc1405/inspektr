@@ -82,6 +82,7 @@ impl SbomFormat for CycloneDxFormat {
                     ecosystem,
                     purl: comp.purl,
                     metadata: HashMap::new(),
+                    source_file: None,
                 }
             })
             .collect();
@@ -115,6 +116,7 @@ mod tests {
                     ecosystem: Ecosystem::Go,
                     purl: "pkg:golang/github.com/stretchr/testify@v1.8.4".to_string(),
                     metadata: HashMap::new(),
+                    source_file: None,
                 },
                 Package {
                     name: "golang.org/x/net".to_string(),
@@ -122,6 +124,7 @@ mod tests {
                     ecosystem: Ecosystem::Go,
                     purl: "pkg:golang/golang.org/x/net@v0.17.0".to_string(),
                     metadata: HashMap::new(),
+                    source_file: None,
                 },
             ],
         }

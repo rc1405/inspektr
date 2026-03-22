@@ -30,6 +30,7 @@ impl Cataloger for GoCataloger {
                 if let Some(text) = file.as_text() {
                     for mut pkg in parse_go_mod(text)? {
                         pkg.metadata.insert("source".to_string(), "go.mod".to_string());
+                        pkg.source_file = Some(file.path.display().to_string());
                         let key = format!("{}@{}", pkg.name, pkg.version);
                         if seen.insert(key) {
                             packages.push(pkg);
@@ -40,6 +41,7 @@ impl Cataloger for GoCataloger {
                 if let Some(text) = file.as_text() {
                     for mut pkg in parse_go_sum(text)? {
                         pkg.metadata.insert("source".to_string(), "go.sum".to_string());
+                        pkg.source_file = Some(file.path.display().to_string());
                         let key = format!("{}@{}", pkg.name, pkg.version);
                         if seen.insert(key) {
                             packages.push(pkg);
@@ -55,6 +57,7 @@ impl Cataloger for GoCataloger {
                 if let Some(text) = extract_buildinfo_from_binary(file.as_bytes()) {
                     for mut pkg in parse_buildinfo_text(&text)? {
                         pkg.metadata.insert("source".to_string(), "binary".to_string());
+                        pkg.source_file = Some(file.path.display().to_string());
                         let key = format!("{}@{}", pkg.name, pkg.version);
                         if seen.insert(key) {
                             packages.push(pkg);
@@ -147,6 +150,7 @@ pub fn parse_buildinfo_text(text: &str) -> Result<Vec<Package>, CatalogerError> 
                         ecosystem: Ecosystem::Go,
                         purl,
                         metadata: HashMap::new(),
+                        source_file: None,
                     });
                 }
             }
@@ -212,6 +216,7 @@ pub fn parse_require_line(line: &str) -> Option<Package> {
         ecosystem: Ecosystem::Go,
         purl,
         metadata: HashMap::new(),
+        source_file: None,
     })
 }
 
@@ -252,6 +257,7 @@ pub fn parse_go_sum(text: &str) -> Result<Vec<Package>, CatalogerError> {
                 ecosystem: Ecosystem::Go,
                 purl,
                 metadata: HashMap::new(),
+                source_file: None,
             });
         }
     }
@@ -433,5 +439,13 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
         assert!(!pkgs.is_empty(), "should find packages in binary");
         assert!(pkgs.iter().any(|p| p.name == "github.com/some/lib" && p.version == "v2.3.4"));
         assert!(pkgs.iter().all(|p| p.metadata.get("source").map(|s| s.as_str()) == Some("binary")));
+    }
+
+    #[test]
+    fn test_catalog_sets_source_file() {
+        let files = vec![text_file("/project/subdir/go.mod",
+            "module example.com/app\n\ngo 1.21\n\nrequire github.com/pkg/errors v0.9.1\n")];
+        let pkgs = GoCataloger.catalog(&files).unwrap();
+        assert_eq!(pkgs[0].source_file, Some("/project/subdir/go.mod".to_string()));
     }
 }

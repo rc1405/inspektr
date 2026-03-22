@@ -68,6 +68,8 @@ fn test_full_pipeline_go_filesystem() {
         published: "2024-01-01T00:00:00Z".to_string(),
         modified: "2024-02-01T00:00:00Z".to_string(),
         withdrawn: None,
+        source: "osv".to_string(),
+        cvss_score: None,
         affected: vec![AffectedPackage {
             ecosystem: "Go".to_string(),
             package_name: "github.com/example/vuln-pkg".to_string(),

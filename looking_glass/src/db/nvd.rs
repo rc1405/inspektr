@@ -110,6 +110,8 @@ pub struct NvdCvssV3 {
 #[serde(rename_all = "camelCase")]
 pub struct NvdCvssV3Data {
     pub base_severity: String,
+    #[serde(default)]
+    pub base_score: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -169,6 +171,16 @@ fn extract_severity(cve: &NvdCve) -> Severity {
         return parse_nvd_severity(&m.base_severity);
     }
     Severity::None
+}
+
+fn extract_cvss_score(cve: &NvdCve) -> Option<f64> {
+    if let Some(m) = cve.metrics.cvss_metric_v31.first() {
+        return m.cvss_data.base_score;
+    }
+    if let Some(m) = cve.metrics.cvss_metric_v30.first() {
+        return m.cvss_data.base_score;
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +259,8 @@ fn cve_to_vuln_records(cve: &NvdCve, ecosystem_filter: Option<&str>) -> Vec<Vuln
         published: cve.published.clone(),
         modified: cve.last_modified.clone(),
         withdrawn: None,
+        source: "nvd".to_string(),
+        cvss_score: extract_cvss_score(cve),
         affected,
     }]
 }
@@ -435,7 +449,7 @@ mod tests {
             last_modified: String::new(),
             metrics: NvdMetrics {
                 cvss_metric_v31: vec![NvdCvssV3 {
-                    cvss_data: NvdCvssV3Data { base_severity: "CRITICAL".to_string() },
+                    cvss_data: NvdCvssV3Data { base_severity: "CRITICAL".to_string(), base_score: Some(9.8) },
                 }],
                 cvss_metric_v30: vec![],
                 cvss_metric_v2: vec![],
@@ -457,6 +471,7 @@ mod tests {
                 cvss_metric_v31: vec![],
                 cvss_metric_v30: vec![],
                 cvss_metric_v2: vec![NvdCvssV2 { base_severity: "HIGH".to_string() }],
+
             },
             configurations: vec![],
         };
@@ -491,7 +506,7 @@ mod tests {
             last_modified: "2022-04-01T00:00:00Z".to_string(),
             metrics: NvdMetrics {
                 cvss_metric_v31: vec![NvdCvssV3 {
-                    cvss_data: NvdCvssV3Data { base_severity: "CRITICAL".to_string() },
+                    cvss_data: NvdCvssV3Data { base_severity: "CRITICAL".to_string(), base_score: Some(9.8) },
                 }],
                 ..Default::default()
             },

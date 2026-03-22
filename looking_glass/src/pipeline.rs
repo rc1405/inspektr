@@ -108,6 +108,50 @@ pub fn scan_vulnerabilities(
     Ok(matcher::match_packages(&store, &sbom.packages))
 }
 
+/// Scan for vulnerabilities and build a full report with metadata.
+pub fn scan_and_report(
+    target: Option<&str>,
+    sbom_path: Option<&str>,
+    db_path: &std::path::Path,
+) -> Result<crate::vuln::report::ScanReport, LookingGlassError> {
+    let (sbom, target_str, target_type_str) = match (target, sbom_path) {
+        (_, Some(path)) => {
+            let bytes = std::fs::read(path).map_err(|e| crate::error::SourceError::Io(e))?;
+            let formatter = select_format("cyclonedx")?;
+            let sbom = formatter.decode(&bytes)?;
+            (sbom, path.to_string(), "sbom".to_string())
+        }
+        (Some(t), None) => {
+            let tt = match crate::source::detect::detect_target_type(t) {
+                crate::source::detect::TargetType::OciImage => "oci",
+                crate::source::detect::TargetType::Binary => "binary",
+                crate::source::detect::TargetType::Filesystem => "filesystem",
+            };
+            let sbom = generate_sbom(t)?;
+            (sbom, t.to_string(), tt.to_string())
+        }
+        (None, None) => {
+            return Err(LookingGlassError::Source(
+                crate::error::SourceError::UnsupportedTarget {
+                    target: "(none)".to_string(),
+                },
+            ));
+        }
+    };
+
+    let db_str = db_path.to_string_lossy();
+    let store = crate::db::store::VulnStore::open(&db_str)?;
+    let matches = matcher::match_packages(&store, &sbom.packages);
+    let total_packages = sbom.packages.len();
+
+    Ok(crate::vuln::report::build_scan_report(
+        &target_str,
+        &target_type_str,
+        total_packages,
+        &matches,
+    ))
+}
+
 /// Map a format name string to a `SbomFormat` implementation.
 fn select_format(format: &str) -> Result<Box<dyn SbomFormat>, LookingGlassError> {
     match format {

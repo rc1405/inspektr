@@ -76,6 +76,8 @@ pub fn match_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityM
                     published: result.published.clone(),
                     modified: result.modified.clone(),
                     withdrawn: None,
+                    source: result.source.clone(),
+                    cvss_score: result.cvss_score,
                 },
                 introduced: range.introduced.clone(),
                 fixed: range.fixed.clone(),
@@ -114,6 +116,8 @@ mod tests {
             published: "2023-01-01T00:00:00Z".to_string(),
             modified: "2023-02-01T00:00:00Z".to_string(),
             withdrawn: None,
+            source: "osv".to_string(),
+            cvss_score: None,
             affected: vec![AffectedPackage {
                 ecosystem: "Go".to_string(),
                 package_name: "github.com/example/pkg".to_string(),
@@ -135,6 +139,7 @@ mod tests {
             ecosystem: Ecosystem::Go,
             purl: format!("pkg:golang/{}@{}", name, version),
             metadata: HashMap::new(),
+            source_file: None,
         }
     }
 

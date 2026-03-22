@@ -26,6 +26,7 @@ impl Cataloger for JavaScriptCataloger {
             };
             for mut pkg in parsed {
                 pkg.metadata.insert("source".to_string(), source.clone());
+                pkg.source_file = Some(file.path.display().to_string());
                 let key = format!("{}@{}", pkg.name, pkg.version);
                 if seen.insert(key) { packages.push(pkg); }
             }
@@ -41,6 +42,7 @@ fn make_js_package(name: &str, version: &str) -> Package {
         ecosystem: Ecosystem::JavaScript,
         purl: format!("pkg:npm/{}@{}", purl_name, version),
         metadata: HashMap::new(),
+        source_file: None,
     }
 }
 

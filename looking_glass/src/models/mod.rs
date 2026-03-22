@@ -70,6 +70,7 @@ pub struct Package {
     pub ecosystem: Ecosystem,
     pub purl: String,
     pub metadata: HashMap<String, String>,
+    pub source_file: Option<String>,
 }
 
 impl Package {
@@ -120,6 +121,8 @@ pub struct Vulnerability {
     pub published: String,
     pub modified: String,
     pub withdrawn: Option<String>,
+    pub source: String,
+    pub cvss_score: Option<f64>,
 }
 
 /// A match between a package and a vulnerability.
@@ -143,6 +146,7 @@ mod tests {
             ecosystem: Ecosystem::Go,
             purl: String::new(),
             metadata: HashMap::new(),
+            source_file: None,
         };
         let purl = pkg.to_purl();
         assert_eq!(purl, "pkg:golang/github.com/stretchr/testify@v1.8.4");
@@ -193,6 +197,7 @@ mod tests {
             ecosystem: Ecosystem::JavaScript,
             purl: String::new(),
             metadata: HashMap::new(),
+            source_file: None,
         };
         assert_eq!(pkg.to_purl(), "pkg:npm/express@4.18.2");
     }
@@ -205,6 +210,7 @@ mod tests {
             ecosystem: Ecosystem::JavaScript,
             purl: String::new(),
             metadata: HashMap::new(),
+            source_file: None,
         };
         assert_eq!(pkg.to_purl(), "pkg:npm/%40types/node@20.10.0");
     }
@@ -217,6 +223,7 @@ mod tests {
             ecosystem: Ecosystem::Python,
             purl: String::new(),
             metadata: HashMap::new(),
+            source_file: None,
         };
         assert_eq!(pkg.to_purl(), "pkg:pypi/requests@2.31.0");
     }
@@ -229,6 +236,7 @@ mod tests {
             ecosystem: Ecosystem::Java,
             purl: String::new(),
             metadata: HashMap::new(),
+            source_file: None,
         };
         assert_eq!(pkg.to_purl(), "pkg:maven/org.apache.commons/commons-lang3@3.14.0");
     }

@@ -12,6 +12,8 @@ pub struct VulnRecord {
     pub published: String,
     pub modified: String,
     pub withdrawn: Option<String>,
+    pub source: String,
+    pub cvss_score: Option<f64>,
     pub affected: Vec<AffectedPackage>,
 }
 
@@ -40,6 +42,8 @@ pub struct VulnQueryResult {
     pub severity: Severity,
     pub published: String,
     pub modified: String,
+    pub source: String,
+    pub cvss_score: Option<f64>,
     pub ranges: Vec<AffectedRange>,
 }
 
@@ -79,7 +83,9 @@ impl VulnStore {
                     severity    TEXT NOT NULL,
                     published   TEXT NOT NULL,
                     modified    TEXT NOT NULL,
-                    withdrawn   TEXT
+                    withdrawn   TEXT,
+                    source      TEXT NOT NULL DEFAULT 'osv',
+                    cvss_score  REAL
                 );
 
                 CREATE TABLE IF NOT EXISTS affected_packages (
@@ -124,8 +130,8 @@ impl VulnStore {
         for record in records {
             tx.execute(
                 "INSERT OR REPLACE INTO vulnerabilities
-                 (id, summary, details, severity, published, modified, withdrawn)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                 (id, summary, details, severity, published, modified, withdrawn, source, cvss_score)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     record.id,
                     record.summary,
@@ -134,6 +140,8 @@ impl VulnStore {
                     record.published,
                     record.modified,
                     record.withdrawn,
+                    record.source,
+                    record.cvss_score,
                 ],
             )
             .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
@@ -172,7 +180,7 @@ impl VulnStore {
             .conn
             .prepare(
                 "SELECT v.id, v.summary, v.details, v.severity, v.published, v.modified,
-                        ap.id AS affected_id
+                        ap.id AS affected_id, v.source, v.cvss_score
                  FROM vulnerabilities v
                  JOIN affected_packages ap ON ap.vuln_id = v.id
                  WHERE ap.ecosystem = ?1 AND ap.package_name = ?2
@@ -190,13 +198,15 @@ impl VulnStore {
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
                     row.get::<_, i64>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, Option<f64>>(8)?,
                 ))
             })
             .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
 
         let mut results = Vec::new();
         for row in rows {
-            let (id, summary, details, severity_str, published, modified, affected_id) =
+            let (id, summary, details, severity_str, published, modified, affected_id, source, cvss_score) =
                 row.map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
 
             let severity = parse_severity_str(&severity_str);
@@ -209,6 +219,8 @@ impl VulnStore {
                 severity,
                 published,
                 modified,
+                source,
+                cvss_score,
                 ranges,
             });
         }
@@ -265,6 +277,8 @@ mod tests {
             published: "2023-01-01T00:00:00Z".to_string(),
             modified: "2023-02-01T00:00:00Z".to_string(),
             withdrawn: None,
+            source: "osv".to_string(),
+            cvss_score: Some(7.5),
             affected: vec![AffectedPackage {
                 ecosystem: "Go".to_string(),
                 package_name: "github.com/example/pkg".to_string(),

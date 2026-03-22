@@ -51,6 +51,10 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
 
+        /// Output format: table or json (default: table for stdout, json for file output)
+        #[arg(long)]
+        format: Option<String>,
+
         /// Exit with a non-zero status if any vulnerability at or above this
         /// severity is found.  Accepted values: none, low, medium, high, critical.
         #[arg(long)]
@@ -119,12 +123,14 @@ fn main() -> Result<()> {
             target,
             sbom,
             output,
+            format,
             fail_on,
             db,
         } => cmd_vuln(
             target.as_deref(),
             sbom.as_deref(),
             output.as_deref(),
+            format.as_deref(),
             fail_on.as_deref(),
             db.as_deref(),
         ),
@@ -171,6 +177,7 @@ fn cmd_vuln(
     target: Option<&str>,
     sbom: Option<&std::path::Path>,
     output: Option<&std::path::Path>,
+    format: Option<&str>,
     fail_on: Option<&str>,
     db: Option<&std::path::Path>,
 ) -> Result<()> {
@@ -180,30 +187,39 @@ fn cmd_vuln(
     };
 
     let sbom_str = sbom.map(|p| p.to_string_lossy().into_owned());
-    let matches = pipeline::scan_vulnerabilities(
+    let scan_report = pipeline::scan_and_report(
         target,
         sbom_str.as_deref(),
         &db_path,
     )
     .with_context(|| "Failed to scan for vulnerabilities")?;
 
-    let table = report::render_table(&matches);
+    // Determine format: explicit flag > default based on output
+    let fmt = match format {
+        Some(f) => f,
+        None => if output.is_some() { "json" } else { "table" },
+    };
+
+    let rendered = match fmt {
+        "table" => report::render_report_table(&scan_report),
+        "json" => report::render_report_json(&scan_report)?,
+        other => bail!("Unknown format: '{}'. Supported: table, json", other),
+    };
 
     match output {
         Some(path) => {
-            std::fs::write(path, &table)
+            std::fs::write(path, &rendered)
                 .with_context(|| format!("Failed to write report to '{}'", path.display()))?;
             eprintln!("Report written to {}", path.display());
         }
         None => {
-            print!("{}", table);
+            print!("{}", rendered);
         }
     }
 
-    // Handle --fail-on
     if let Some(severity_str) = fail_on {
         let threshold = parse_severity_flag(severity_str)?;
-        if report::has_severity_at_or_above(&matches, threshold) {
+        if report::has_severity_at_or_above_report(&scan_report, threshold) {
             bail!(
                 "Found vulnerabilities at or above severity '{}'",
                 severity_str

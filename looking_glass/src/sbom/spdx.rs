@@ -127,6 +127,7 @@ impl SbomFormat for SpdxFormat {
                     ecosystem,
                     purl,
                     metadata: HashMap::new(),
+                    source_file: None,
                 }
             })
             .collect();
@@ -157,7 +158,7 @@ fn ecosystem_from_purl(purl: &str) -> Ecosystem {
 }
 
 /// Simple ISO 8601 UTC timestamp without pulling in chrono crate.
-fn chrono_now() -> String {
+pub fn chrono_now() -> String {
     // Use std::time to get seconds since epoch, format manually
     let duration = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -228,6 +229,7 @@ mod tests {
                     ecosystem: Ecosystem::JavaScript,
                     purl: "pkg:npm/express@4.18.2".to_string(),
                     metadata: HashMap::new(),
+                    source_file: None,
                 },
                 Package {
                     name: "github.com/pkg/errors".to_string(),
@@ -235,6 +237,7 @@ mod tests {
                     ecosystem: Ecosystem::Go,
                     purl: "pkg:golang/github.com/pkg/errors@v0.9.1".to_string(),
                     metadata: HashMap::new(),
+                    source_file: None,
                 },
             ],
         }
