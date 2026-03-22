@@ -74,14 +74,14 @@ enum Commands {
 
 #[derive(Debug, Subcommand)]
 enum DbCommands {
-    /// Download (or refresh) the vulnerability database from OSV.
+    /// Pull the latest pre-built vulnerability database from Docker Hub.
     Update {
-        /// Registry / ecosystem to update (default: Go).
-        #[arg(long, default_value = "Go")]
+        /// OCI image reference for the database (default: rc1405/looking-glass-db:latest)
+        #[arg(long, default_value = "rc1405/looking-glass-db:latest")]
         registry: String,
     },
 
-    /// Build a vulnerability database from a local OSV data directory.
+    /// Build the vulnerability database from OSV and NVD sources.
     #[cfg(feature = "db-admin")]
     Build {
         /// Ecosystem to import (default: all). Values: Go, npm, PyPI, Maven
@@ -103,6 +103,9 @@ enum DbCommands {
         #[arg(long)]
         db: Option<PathBuf>,
     },
+
+    /// Delete the local vulnerability database.
+    Clean,
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +148,8 @@ fn main() -> Result<()> {
 
             #[cfg(feature = "db-admin")]
             DbCommands::Push { registry, db } => cmd_db_push(&registry, db.as_deref()),
+
+            DbCommands::Clean => cmd_db_clean(),
         },
     }
 }
@@ -233,39 +238,32 @@ fn cmd_vuln(
 fn cmd_db_update(registry: &str) -> Result<()> {
     let db_path = pipeline::default_db_path();
 
-    // Create parent directory if needed.
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("Failed to create directory '{}'", parent.display()))?;
     }
 
-    eprintln!(
-        "Updating vulnerability database for ecosystem '{}' at {} …",
-        registry,
-        db_path.display()
-    );
+    eprintln!("Pulling vulnerability database from {} …", registry);
 
-    cmd_db_update_impl(registry, &db_path)
-}
+    looking_glass::oci::pull::pull_artifact(registry, &db_path)
+        .with_context(|| format!("Failed to pull database from '{}'", registry))?;
 
-#[cfg(feature = "db-admin")]
-fn cmd_db_update_impl(registry: &str, db_path: &std::path::Path) -> Result<()> {
-    use looking_glass::db::store::VulnStore;
-    let db_str = db_path.to_string_lossy();
-    let mut store =
-        VulnStore::open(&db_str).context("Failed to open vulnerability database")?;
-    let count = looking_glass::db::osv::import_osv_ecosystem(&mut store, registry)
-        .context("Failed to import OSV data")?;
-    eprintln!("Imported {} vulnerabilities.", count);
+    eprintln!("Database updated at {}", db_path.display());
     Ok(())
 }
 
-#[cfg(not(feature = "db-admin"))]
-fn cmd_db_update_impl(_registry: &str, _db_path: &std::path::Path) -> Result<()> {
-    bail!(
-        "The 'db update' command requires the 'db-admin' feature. \
-         Rebuild with: cargo build --features db-admin"
-    )
+fn cmd_db_clean() -> Result<()> {
+    let db_path = pipeline::default_db_path();
+
+    if db_path.exists() {
+        std::fs::remove_file(&db_path)
+            .with_context(|| format!("Failed to delete database at '{}'", db_path.display()))?;
+        eprintln!("Deleted vulnerability database at {}", db_path.display());
+    } else {
+        eprintln!("No database found at {}", db_path.display());
+    }
+
+    Ok(())
 }
 
 #[cfg(feature = "db-admin")]

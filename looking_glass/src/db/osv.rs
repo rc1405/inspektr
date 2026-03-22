@@ -235,12 +235,12 @@ impl VulnSource for OsvSource {
         store: &mut VulnStore,
         ecosystem: Option<&str>,
     ) -> Result<usize, crate::error::DatabaseError> {
-        match ecosystem {
+        let total = match ecosystem {
             Some(eco) => {
                 eprintln!("osv: importing {}...", eco);
                 let count = import_osv_ecosystem(store, eco)?;
                 eprintln!("osv: {} — {} vulnerabilities", eco, count);
-                Ok(count)
+                count
             }
             None => {
                 let mut total = 0;
@@ -250,9 +250,14 @@ impl VulnSource for OsvSource {
                     eprintln!("osv: {} — {} vulnerabilities", eco, count);
                     total += count;
                 }
-                Ok(total)
+                total
             }
-        }
+        };
+
+        // Record the update timestamp
+        store.set_last_updated("osv", &crate::sbom::spdx::chrono_now())?;
+
+        Ok(total)
     }
 }
 

@@ -53,8 +53,23 @@ pub struct VulnStore {
 }
 
 impl VulnStore {
+    /// Current schema version. Increment this when the schema changes.
+    const SCHEMA_VERSION: u32 = 2;
+
     /// Open (or create) a database at the given path.
+    /// If the existing database has an older schema version, it is deleted
+    /// and recreated with the current schema.
     pub fn open(path: &str) -> Result<Self, DatabaseError> {
+        // Check for schema migration before opening
+        if std::path::Path::new(path).exists() {
+            if let Err(reason) = Self::check_schema_version(path) {
+                eprintln!("Migrating database: {}. Rebuilding...", reason);
+                std::fs::remove_file(path).map_err(|e| {
+                    DatabaseError::Sqlite(format!("Failed to remove old database: {}", e))
+                })?;
+            }
+        }
+
         let conn = Connection::open(path)
             .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
         let mut store = Self { conn };
@@ -71,13 +86,55 @@ impl VulnStore {
         Ok(store)
     }
 
-    /// Create all required tables and indexes if they do not already exist.
+    /// Check if an existing database has a compatible schema version.
+    /// Returns Ok(()) if compatible, Err(reason) if migration is needed.
+    fn check_schema_version(path: &str) -> Result<(), String> {
+        let conn = Connection::open(path).map_err(|e| format!("cannot open: {}", e))?;
+
+        // Check if metadata table exists
+        let has_metadata: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='metadata'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        if !has_metadata {
+            return Err("no metadata table (pre-v2 schema)".to_string());
+        }
+
+        let version: u32 = conn
+            .query_row(
+                "SELECT value FROM metadata WHERE key = 'schema_version'",
+                [],
+                |row| {
+                    let v: String = row.get(0)?;
+                    Ok(v.parse::<u32>().unwrap_or(0))
+                },
+            )
+            .unwrap_or(0);
+
+        if version < Self::SCHEMA_VERSION {
+            return Err(format!(
+                "schema version {} is older than current version {}",
+                version,
+                Self::SCHEMA_VERSION
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Create all required tables and indexes if they do not already exist,
+    /// and store the current schema version.
     pub fn create_tables(&mut self) -> Result<(), DatabaseError> {
         self.conn
             .execute_batch(
                 "
                 CREATE TABLE IF NOT EXISTS vulnerabilities (
-                    id          TEXT PRIMARY KEY,
+                    id          TEXT NOT NULL,
                     summary     TEXT NOT NULL,
                     details     TEXT NOT NULL,
                     severity    TEXT NOT NULL,
@@ -85,12 +142,14 @@ impl VulnStore {
                     modified    TEXT NOT NULL,
                     withdrawn   TEXT,
                     source      TEXT NOT NULL DEFAULT 'osv',
-                    cvss_score  REAL
+                    cvss_score  REAL,
+                    PRIMARY KEY (id, source)
                 );
 
                 CREATE TABLE IF NOT EXISTS affected_packages (
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    vuln_id         TEXT NOT NULL REFERENCES vulnerabilities(id),
+                    vuln_id         TEXT NOT NULL,
+                    vuln_source     TEXT NOT NULL DEFAULT 'osv',
                     ecosystem       TEXT NOT NULL,
                     package_name    TEXT NOT NULL
                 );
@@ -105,9 +164,88 @@ impl VulnStore {
                     introduced      TEXT,
                     fixed           TEXT
                 );
+
+                CREATE TABLE IF NOT EXISTS metadata (
+                    key   TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
                 ",
             )
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+
+        // Store the schema version
+        self.set_metadata("schema_version", &Self::SCHEMA_VERSION.to_string())
+    }
+
+    /// Get a metadata value by key.
+    pub fn get_metadata(&self, key: &str) -> Option<String> {
+        self.conn
+            .query_row(
+                "SELECT value FROM metadata WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .ok()
+    }
+
+    /// Set a metadata value (upsert).
+    pub fn set_metadata(&mut self, key: &str, value: &str) -> Result<(), DatabaseError> {
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            )
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Get the last update timestamp for a given source (e.g., "osv", "nvd").
+    /// Returns an ISO 8601 string or None if never updated.
+    pub fn last_updated(&self, source: &str) -> Option<String> {
+        self.get_metadata(&format!("last_updated_{}", source))
+    }
+
+    /// Set the last update timestamp for a given source.
+    pub fn set_last_updated(&mut self, source: &str, timestamp: &str) -> Result<(), DatabaseError> {
+        self.set_metadata(&format!("last_updated_{}", source), timestamp)
+    }
+
+    /// Check database staleness and print warnings to stderr.
+    /// Returns true if the database is usable (even if stale).
+    pub fn check_staleness(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Check the most recent update across all sources
+        let mut newest_update: Option<u64> = None;
+        for source in &["osv", "nvd"] {
+            if let Some(ts) = self.last_updated(source) {
+                if let Ok(epoch) = parse_iso8601_to_epoch(&ts) {
+                    newest_update = Some(newest_update.map_or(epoch, |n: u64| n.max(epoch)));
+                }
+            }
+        }
+
+        let Some(last) = newest_update else {
+            eprintln!("WARNING: Vulnerability database has never been updated. Run `looking-glass db update` or `looking-glass db build`.");
+            return;
+        };
+
+        let age_days = (now.saturating_sub(last)) / 86400;
+
+        if age_days > 30 {
+            eprintln!(
+                "ERROR: Vulnerability database is {} days old. Results may be inaccurate. Run `looking-glass db update` or `looking-glass db build`.",
+                age_days
+            );
+        } else if age_days > 7 {
+            eprintln!(
+                "WARNING: Vulnerability database is {} days old. Consider running `looking-glass db update` or `looking-glass db build`.",
+                age_days
+            );
+        }
     }
 
     /// Return the total number of vulnerability records stored.
@@ -128,6 +266,20 @@ impl VulnStore {
             .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
 
         for record in records {
+            // Clean up old affected_packages and their ranges for this (id, source) pair.
+            // Scoped by source so OSV re-import doesn't delete NVD data for the same CVE.
+            tx.execute(
+                "DELETE FROM affected_ranges WHERE affected_id IN
+                 (SELECT id FROM affected_packages WHERE vuln_id = ?1 AND vuln_source = ?2)",
+                params![record.id, record.source],
+            )
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+            tx.execute(
+                "DELETE FROM affected_packages WHERE vuln_id = ?1 AND vuln_source = ?2",
+                params![record.id, record.source],
+            )
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+
             tx.execute(
                 "INSERT OR REPLACE INTO vulnerabilities
                  (id, summary, details, severity, published, modified, withdrawn, source, cvss_score)
@@ -148,9 +300,9 @@ impl VulnStore {
 
             for pkg in &record.affected {
                 tx.execute(
-                    "INSERT INTO affected_packages (vuln_id, ecosystem, package_name)
-                     VALUES (?1, ?2, ?3)",
-                    params![record.id, pkg.ecosystem, pkg.package_name],
+                    "INSERT INTO affected_packages (vuln_id, vuln_source, ecosystem, package_name)
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![record.id, record.source, pkg.ecosystem, pkg.package_name],
                 )
                 .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
 
@@ -182,7 +334,7 @@ impl VulnStore {
                 "SELECT v.id, v.summary, v.details, v.severity, v.published, v.modified,
                         ap.id AS affected_id, v.source, v.cvss_score
                  FROM vulnerabilities v
-                 JOIN affected_packages ap ON ap.vuln_id = v.id
+                 JOIN affected_packages ap ON ap.vuln_id = v.id AND ap.vuln_source = v.source
                  WHERE ap.ecosystem = ?1 AND ap.package_name = ?2
                    AND v.withdrawn IS NULL",
             )
@@ -262,6 +414,41 @@ fn parse_severity_str(s: &str) -> Severity {
         "Low" => Severity::Low,
         _ => Severity::None,
     }
+}
+
+/// Parse a simplified ISO 8601 timestamp (YYYY-MM-DDTHH:MM:SSZ) to Unix epoch seconds.
+fn parse_iso8601_to_epoch(s: &str) -> Result<u64, ()> {
+    // Expect format: 2026-03-22T18:28:22Z or similar
+    let s = s.trim_end_matches('Z');
+    let (date, time) = s.split_once('T').ok_or(())?;
+    let date_parts: Vec<&str> = date.split('-').collect();
+    let time_parts: Vec<&str> = time.split(':').collect();
+    if date_parts.len() != 3 || time_parts.len() < 2 {
+        return Err(());
+    }
+    let year: u64 = date_parts[0].parse().map_err(|_| ())?;
+    let month: u64 = date_parts[1].parse().map_err(|_| ())?;
+    let day: u64 = date_parts[2].parse().map_err(|_| ())?;
+    let hour: u64 = time_parts[0].parse().map_err(|_| ())?;
+    let min: u64 = time_parts[1].parse().map_err(|_| ())?;
+    let sec: u64 = time_parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+
+    // Rough epoch calculation (ignoring leap seconds, good enough for staleness checks)
+    let mut days: u64 = 0;
+    for y in 1970..year {
+        days += if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) { 366 } else { 365 };
+    }
+    let month_days: [u64; 12] = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    for m in 0..(month.saturating_sub(1) as usize).min(12) {
+        days += month_days[m];
+    }
+    days += day.saturating_sub(1);
+
+    Ok(days * 86400 + hour * 3600 + min * 60 + sec)
 }
 
 #[cfg(test)]

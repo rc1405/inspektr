@@ -141,6 +141,7 @@ pub fn scan_and_report(
 
     let db_str = db_path.to_string_lossy();
     let store = crate::db::store::VulnStore::open(&db_str)?;
+    store.check_staleness();
     let matches = matcher::match_packages(&store, &sbom.packages);
     let total_packages = sbom.packages.len();
 

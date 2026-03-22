@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::error::LookingGlassError;
-use crate::models::{Severity, VulnerabilityMatch, Ecosystem};
+use crate::models::{Severity, VulnerabilityMatch};
 
 // ---------------------------------------------------------------------------
 // New report types

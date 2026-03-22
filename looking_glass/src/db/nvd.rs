@@ -293,42 +293,78 @@ impl NvdClient {
         }
     }
 
-    fn fetch_page(&mut self, start_index: u32) -> Result<NvdResponse, DatabaseError> {
-        self.rate_limiter.wait_if_needed();
+    /// Maximum number of retries when NVD returns 429 Too Many Requests.
+    const MAX_RETRIES: u32 = 5;
+    /// Base backoff duration for 429 retries (doubles each attempt).
+    const RETRY_BACKOFF_SECS: u64 = 30;
 
-        let mut request = self
-            .http
-            .get(NVD_API_BASE)
-            .query(&[
-                ("startIndex", start_index.to_string()),
-                ("resultsPerPage", self.results_per_page().to_string()),
-            ]);
+    fn fetch_page(
+        &mut self,
+        start_index: u32,
+        last_mod_start: Option<&str>,
+    ) -> Result<NvdResponse, DatabaseError> {
+        for attempt in 0..Self::MAX_RETRIES {
+            self.rate_limiter.wait_if_needed();
 
-        if let Some(key) = &self.api_key {
-            request = request.header("apiKey", key);
+            let mut query_params = vec![
+                ("startIndex".to_string(), start_index.to_string()),
+                ("resultsPerPage".to_string(), self.results_per_page().to_string()),
+            ];
+
+            if let Some(start_date) = last_mod_start {
+                query_params.push(("lastModStartDate".to_string(), start_date.to_string()));
+                // NVD requires lastModEndDate when lastModStartDate is set (max 120 day range)
+                query_params.push(("lastModEndDate".to_string(), now_iso8601()));
+            }
+
+            let mut request = self
+                .http
+                .get(NVD_API_BASE)
+                .query(&query_params);
+
+            if let Some(key) = &self.api_key {
+                request = request.header("apiKey", key);
+            }
+
+            let response = request.send().map_err(|e| {
+                DatabaseError::ImportFailed(format!("NVD API request failed: {}", e))
+            })?;
+
+            if response.status() == reqwest::StatusCode::FORBIDDEN {
+                return Err(DatabaseError::ImportFailed(
+                    "NVD API key rejected. Check NVD_API_KEY or unset it to use anonymous access."
+                        .to_string(),
+                ));
+            }
+
+            if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let wait_secs = Self::RETRY_BACKOFF_SECS * 2u64.pow(attempt);
+                eprintln!(
+                    "nvd: rate limited (429), waiting {}s before retry ({}/{})...",
+                    wait_secs,
+                    attempt + 1,
+                    Self::MAX_RETRIES
+                );
+                std::thread::sleep(Duration::from_secs(wait_secs));
+                continue;
+            }
+
+            if !response.status().is_success() {
+                return Err(DatabaseError::ImportFailed(format!(
+                    "NVD API returned HTTP {}",
+                    response.status()
+                )));
+            }
+
+            return response.json::<NvdResponse>().map_err(|e| {
+                DatabaseError::ImportFailed(format!("Failed to parse NVD response: {}", e))
+            });
         }
 
-        let response = request.send().map_err(|e| {
-            DatabaseError::ImportFailed(format!("NVD API request failed: {}", e))
-        })?;
-
-        if response.status() == reqwest::StatusCode::FORBIDDEN {
-            return Err(DatabaseError::ImportFailed(
-                "NVD API key rejected. Check NVD_API_KEY or unset it to use anonymous access."
-                    .to_string(),
-            ));
-        }
-
-        if !response.status().is_success() {
-            return Err(DatabaseError::ImportFailed(format!(
-                "NVD API returned HTTP {}",
-                response.status()
-            )));
-        }
-
-        response.json::<NvdResponse>().map_err(|e| {
-            DatabaseError::ImportFailed(format!("Failed to parse NVD response: {}", e))
-        })
+        Err(DatabaseError::ImportFailed(format!(
+            "NVD API rate limit exceeded after {} retries",
+            Self::MAX_RETRIES
+        )))
     }
 
     fn results_per_page(&self) -> u32 {
@@ -361,8 +397,16 @@ impl VulnSource for NvdSource {
         let mut total_cves = 0;
         let mut start_index = 0u32;
 
+        // Check for last update timestamp — if present, do incremental import
+        let last_mod_start = store.last_updated("nvd");
+        if let Some(ref ts) = last_mod_start {
+            eprintln!("nvd: incremental update since {}", ts);
+        } else {
+            eprintln!("nvd: full import (no previous update found)");
+        }
+
         loop {
-            let response = client.fetch_page(start_index)?;
+            let response = client.fetch_page(start_index, last_mod_start.as_deref())?;
             let total_results = response.total_results;
             let page_size = response.results_per_page;
             let page_num = start_index / page_size + 1;
@@ -399,8 +443,16 @@ impl VulnSource for NvdSource {
             total_imported, total_cves, match_rate
         );
 
+        // Record the update timestamp
+        store.set_last_updated("nvd", &now_iso8601())?;
+
         Ok(total_imported)
     }
+}
+
+/// Current UTC time as ISO 8601 string (for NVD API date parameters).
+fn now_iso8601() -> String {
+    crate::sbom::spdx::chrono_now()
 }
 
 // ---------------------------------------------------------------------------
