@@ -1,26 +1,27 @@
-use std::path::Path;
-use crate::cataloger::golang::GoCataloger;
-use crate::cataloger::javascript::JavaScriptCataloger;
-use crate::cataloger::python::PythonCataloger;
-use crate::cataloger::java::JavaCataloger;
-use crate::cataloger::conan::ConanCataloger;
-use crate::cataloger::vcpkg::VcpkgCataloger;
-use crate::cataloger::dotnet::DotNetCataloger;
-use crate::cataloger::php::PhpCataloger;
-use crate::cataloger::rust_lang::RustCataloger;
-use crate::cataloger::ruby::RubyCataloger;
-use crate::cataloger::swift::SwiftCataloger;
 use crate::cataloger::Cataloger;
+use crate::cataloger::conan::ConanCataloger;
+use crate::cataloger::dotnet::DotNetCataloger;
+use crate::cataloger::golang::GoCataloger;
+use crate::cataloger::java::JavaCataloger;
+use crate::cataloger::javascript::JavaScriptCataloger;
+use crate::cataloger::os::OsCataloger;
+use crate::cataloger::php::PhpCataloger;
+use crate::cataloger::python::PythonCataloger;
+use crate::cataloger::ruby::RubyCataloger;
+use crate::cataloger::rust_lang::RustCataloger;
+use crate::cataloger::swift::SwiftCataloger;
+use crate::cataloger::vcpkg::VcpkgCataloger;
 use crate::db::store::VulnStore;
 use crate::error::LookingGlassError;
 use crate::models::{FileEntry, Package, Sbom, VulnerabilityMatch};
-use crate::sbom::cyclonedx::CycloneDxFormat;
 use crate::sbom::SbomFormat;
-use crate::source::detect::{detect_target_type, TargetType};
+use crate::sbom::cyclonedx::CycloneDxFormat;
+use crate::source::Source;
+use crate::source::detect::{TargetType, detect_target_type};
 use crate::source::filesystem::FilesystemSource;
 use crate::source::oci::OciImageSource;
-use crate::source::Source;
 use crate::vuln::matcher;
+use std::path::Path;
 
 /// Build the list of catalogers to run.
 fn catalogers() -> Vec<Box<dyn Cataloger>> {
@@ -36,6 +37,7 @@ fn catalogers() -> Vec<Box<dyn Cataloger>> {
         Box::new(RustCataloger),
         Box::new(RubyCataloger),
         Box::new(SwiftCataloger),
+        Box::new(OsCataloger),
     ]
 }
 
@@ -62,11 +64,9 @@ pub fn run_catalogers(files: &[FileEntry]) -> Vec<Package> {
 fn source_from_target(target: &str) -> Result<Box<dyn Source>, LookingGlassError> {
     match detect_target_type(target) {
         TargetType::OciImage => Ok(Box::new(OciImageSource::new(target.to_string()))),
-        TargetType::Binary | TargetType::Filesystem => {
-            Ok(Box::new(FilesystemSource::new(
-                std::path::PathBuf::from(target),
-            )))
-        }
+        TargetType::Binary | TargetType::Filesystem => Ok(Box::new(FilesystemSource::new(
+            std::path::PathBuf::from(target),
+        ))),
     }
 }
 
@@ -101,9 +101,7 @@ pub fn scan_vulnerabilities(
     let sbom = match (target, sbom_path) {
         (_, Some(path)) => {
             // Read SBOM from file and decode it.
-            let bytes = std::fs::read(path).map_err(|e| {
-                crate::error::SourceError::Io(e)
-            })?;
+            let bytes = std::fs::read(path).map_err(|e| crate::error::SourceError::Io(e))?;
             let formatter = select_format("cyclonedx")?;
             formatter.decode(&bytes)?
         }
@@ -291,7 +289,8 @@ mod tests {
 
     #[test]
     fn test_run_catalogers_php() {
-        let content = r#"{"packages":[{"name":"monolog/monolog","version":"3.5.0"}],"packages-dev":[]}"#;
+        let content =
+            r#"{"packages":[{"name":"monolog/monolog","version":"3.5.0"}],"packages-dev":[]}"#;
         let files = vec![FileEntry {
             path: PathBuf::from("/project/composer.lock"),
             contents: FileContents::Text(content.to_string()),
@@ -317,7 +316,8 @@ mod tests {
 
     #[test]
     fn test_run_catalogers_dotnet() {
-        let content = r#"{"version":1,"dependencies":{"net8.0":{"Newtonsoft.Json":{"resolved":"13.0.3"}}}}"#;
+        let content =
+            r#"{"version":1,"dependencies":{"net8.0":{"Newtonsoft.Json":{"resolved":"13.0.3"}}}}"#;
         let files = vec![FileEntry {
             path: PathBuf::from("/project/packages.lock.json"),
             contents: FileContents::Text(content.to_string()),

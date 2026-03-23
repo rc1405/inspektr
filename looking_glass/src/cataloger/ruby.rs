@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
-use super::Cataloger;
+use std::collections::HashMap;
 
 pub struct RubyCataloger;
 
 impl Cataloger for RubyCataloger {
-    fn name(&self) -> &str { "ruby" }
+    fn name(&self) -> &str {
+        "ruby"
+    }
 
     fn can_catalog(&self, files: &[FileEntry]) -> bool {
         files.iter().any(|f| {
@@ -20,13 +22,18 @@ impl Cataloger for RubyCataloger {
         let mut seen = std::collections::HashSet::new();
         for file in files {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if file_name != "Gemfile.lock" { continue; }
+            if file_name != "Gemfile.lock" {
+                continue;
+            }
             if let Some(text) = file.as_text() {
                 for mut pkg in parse_gemfile_lock(text)? {
-                    pkg.metadata.insert("source".to_string(), "Gemfile.lock".to_string());
+                    pkg.metadata
+                        .insert("source".to_string(), "Gemfile.lock".to_string());
                     pkg.source_file = Some(file.path.display().to_string());
                     let key = format!("{}@{}", pkg.name, pkg.version);
-                    if seen.insert(key) { packages.push(pkg); }
+                    if seen.insert(key) {
+                        packages.push(pkg);
+                    }
                 }
             }
         }
@@ -84,7 +91,9 @@ pub fn parse_gemfile_lock(content: &str) -> Result<Vec<Package>, CatalogerError>
             continue;
         }
 
-        if !in_gem_specs { continue; }
+        if !in_gem_specs {
+            continue;
+        }
 
         // Exactly 4-space indent = package entry (not transitive deps which have 6+ spaces)
         if line.starts_with("    ") && !line.starts_with("     ") {
@@ -117,8 +126,8 @@ pub fn parse_gemfile_lock(content: &str) -> Result<Vec<Package>, CatalogerError>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::{FileContents, FileEntry};
+    use std::path::PathBuf;
 
     fn text_entry(path: &str, content: &str) -> FileEntry {
         FileEntry {
@@ -147,8 +156,14 @@ mod tests {
         let content = "GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (7.1.2)\n      actioncable (= 7.1.2)\n    rack (3.0.8)\n\nPLATFORMS\n  ruby\n\nDEPENDENCIES\n  rails\n";
         let pkgs = parse_gemfile_lock(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "rails" && p.version == "7.1.2"));
-        assert!(pkgs.iter().any(|p| p.name == "rack" && p.version == "3.0.8"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "rails" && p.version == "7.1.2")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "rack" && p.version == "3.0.8")
+        );
         assert!(pkgs.iter().all(|p| p.ecosystem == Ecosystem::Ruby));
     }
 

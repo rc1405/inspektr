@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
-use super::Cataloger;
+use std::collections::HashMap;
 
 pub struct RustCataloger;
 
 impl Cataloger for RustCataloger {
-    fn name(&self) -> &str { "rust" }
+    fn name(&self) -> &str {
+        "rust"
+    }
 
     fn can_catalog(&self, files: &[FileEntry]) -> bool {
         files.iter().any(|f| {
@@ -20,13 +22,18 @@ impl Cataloger for RustCataloger {
         let mut seen = std::collections::HashSet::new();
         for file in files {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if file_name != "Cargo.lock" { continue; }
+            if file_name != "Cargo.lock" {
+                continue;
+            }
             if let Some(text) = file.as_text() {
                 for mut pkg in parse_cargo_lock(text)? {
-                    pkg.metadata.insert("source".to_string(), "Cargo.lock".to_string());
+                    pkg.metadata
+                        .insert("source".to_string(), "Cargo.lock".to_string());
                     pkg.source_file = Some(file.path.display().to_string());
                     let key = format!("{}@{}", pkg.name, pkg.version);
-                    if seen.insert(key) { packages.push(pkg); }
+                    if seen.insert(key) {
+                        packages.push(pkg);
+                    }
                 }
             }
         }
@@ -46,16 +53,20 @@ fn make_rust_package(name: &str, version: &str) -> Package {
 }
 
 pub fn parse_cargo_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
-    let doc: toml::Value = content.parse()
-        .map_err(|e: toml::de::Error| CatalogerError::ParseFailed {
-            file: "Cargo.lock".to_string(),
-            reason: e.to_string(),
-        })?;
+    let doc: toml::Value =
+        content
+            .parse()
+            .map_err(|e: toml::de::Error| CatalogerError::ParseFailed {
+                file: "Cargo.lock".to_string(),
+                reason: e.to_string(),
+            })?;
     let mut packages = Vec::new();
     if let Some(pkgs) = doc.get("package").and_then(|v| v.as_array()) {
         for pkg in pkgs {
             // Skip packages without a source field (root project packages)
-            if pkg.get("source").is_none() { continue; }
+            if pkg.get("source").is_none() {
+                continue;
+            }
             let name = pkg.get("name").and_then(|v| v.as_str()).unwrap_or("");
             let version = pkg.get("version").and_then(|v| v.as_str()).unwrap_or("");
             if !name.is_empty() && !version.is_empty() {
@@ -73,8 +84,8 @@ pub fn parse_cargo_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::{FileContents, FileEntry};
+    use std::path::PathBuf;
 
     fn text_entry(path: &str, content: &str) -> FileEntry {
         FileEntry {

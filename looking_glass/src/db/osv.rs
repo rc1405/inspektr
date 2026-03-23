@@ -228,13 +228,19 @@ pub struct OsvSource;
 
 #[cfg(feature = "db-admin")]
 impl VulnSource for OsvSource {
-    fn name(&self) -> &str { "osv" }
+    fn name(&self) -> &str {
+        "osv"
+    }
 
     fn import(
         &self,
         store: &mut VulnStore,
         ecosystem: Option<&str>,
     ) -> Result<usize, crate::error::DatabaseError> {
+        // Clear existing OSV data for clean re-import
+        eprintln!("osv: clearing previous data...");
+        store.clear_source("osv")?;
+
         let total = match ecosystem {
             Some(eco) => {
                 eprintln!("osv: importing {}...", eco);

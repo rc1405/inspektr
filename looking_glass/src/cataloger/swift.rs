@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
-use super::Cataloger;
+use std::collections::HashMap;
 
 pub struct SwiftCataloger;
 
 impl Cataloger for SwiftCataloger {
-    fn name(&self) -> &str { "swift" }
+    fn name(&self) -> &str {
+        "swift"
+    }
 
     fn can_catalog(&self, files: &[FileEntry]) -> bool {
         files.iter().any(|f| {
@@ -20,13 +22,18 @@ impl Cataloger for SwiftCataloger {
         let mut seen = std::collections::HashSet::new();
         for file in files {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if file_name != "Package.resolved" { continue; }
+            if file_name != "Package.resolved" {
+                continue;
+            }
             if let Some(text) = file.as_text() {
                 for mut pkg in parse_package_resolved(text)? {
-                    pkg.metadata.insert("source".to_string(), "Package.resolved".to_string());
+                    pkg.metadata
+                        .insert("source".to_string(), "Package.resolved".to_string());
                     pkg.source_file = Some(file.path.display().to_string());
                     let key = format!("{}@{}", pkg.name, pkg.version);
-                    if seen.insert(key) { packages.push(pkg); }
+                    if seen.insert(key) {
+                        packages.push(pkg);
+                    }
                 }
             }
         }
@@ -46,8 +53,8 @@ fn make_swift_package(name: &str, version: &str) -> Package {
 }
 
 pub fn parse_package_resolved(content: &str) -> Result<Vec<Package>, CatalogerError> {
-    let doc: serde_json::Value = serde_json::from_str(content)
-        .map_err(|e| CatalogerError::ParseFailed {
+    let doc: serde_json::Value =
+        serde_json::from_str(content).map_err(|e| CatalogerError::ParseFailed {
             file: "Package.resolved".to_string(),
             reason: e.to_string(),
         })?;
@@ -60,23 +67,29 @@ pub fn parse_package_resolved(content: &str) -> Result<Vec<Package>, CatalogerEr
         doc.get("pins").and_then(|v| v.as_array())
     } else {
         // V1: "object" -> "pins" array
-        doc.get("object").and_then(|o| o.get("pins")).and_then(|v| v.as_array())
+        doc.get("object")
+            .and_then(|o| o.get("pins"))
+            .and_then(|v| v.as_array())
     };
 
     if let Some(pins) = pins {
         for pin in pins {
             // V2 uses "identity", V1 uses "package"
-            let name = pin.get("identity")
+            let name = pin
+                .get("identity")
                 .or_else(|| pin.get("package"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
 
-            let version = pin.get("state")
+            let version = pin
+                .get("state")
                 .and_then(|s| s.get("version"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
 
-            if name.is_empty() || version.is_empty() { continue; }
+            if name.is_empty() || version.is_empty() {
+                continue;
+            }
             packages.push(make_swift_package(name, version));
         }
     }
@@ -91,8 +104,8 @@ pub fn parse_package_resolved(content: &str) -> Result<Vec<Package>, CatalogerEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::{FileContents, FileEntry};
+    use std::path::PathBuf;
 
     fn text_entry(path: &str, content: &str) -> FileEntry {
         FileEntry {

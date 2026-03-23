@@ -192,10 +192,7 @@ mod tests {
 
     #[test]
     fn test_parse_with_digest() {
-        let r = ImageReference::parse(
-            "ghcr.io/myorg/myrepo@sha256:abc123def456",
-        )
-        .unwrap();
+        let r = ImageReference::parse("ghcr.io/myorg/myrepo@sha256:abc123def456").unwrap();
         assert_eq!(r.registry, "ghcr.io");
         assert_eq!(r.repository, "myorg/myrepo");
         assert_eq!(r.tag, None);
@@ -223,8 +220,12 @@ mod tests {
     #[test]
     fn test_looks_like_image_ref() {
         // Registry with dot in hostname
-        assert!(ImageReference::looks_like_image_ref("ghcr.io/myorg/myrepo:v1"));
-        assert!(ImageReference::looks_like_image_ref("docker.io/library/golang:1.21"));
+        assert!(ImageReference::looks_like_image_ref(
+            "ghcr.io/myorg/myrepo:v1"
+        ));
+        assert!(ImageReference::looks_like_image_ref(
+            "docker.io/library/golang:1.21"
+        ));
         // Localhost
         assert!(ImageReference::looks_like_image_ref("localhost/myrepo"));
         // Bare name with digest
@@ -233,7 +234,9 @@ mod tests {
         assert!(!ImageReference::looks_like_image_ref("/absolute/path"));
         assert!(!ImageReference::looks_like_image_ref(""));
         assert!(!ImageReference::looks_like_image_ref("myorg/myrepo")); // no dot in first segment
-        assert!(!ImageReference::looks_like_image_ref("test-fixtures/javascript/"));
+        assert!(!ImageReference::looks_like_image_ref(
+            "test-fixtures/javascript/"
+        ));
         assert!(!ImageReference::looks_like_image_ref("./relative/path"));
     }
 }

@@ -70,8 +70,7 @@ impl VulnStore {
             }
         }
 
-        let conn = Connection::open(path)
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
         let mut store = Self { conn };
         store.create_tables()?;
         Ok(store)
@@ -79,8 +78,8 @@ impl VulnStore {
 
     /// Open an in-memory database (useful for tests).
     pub fn open_in_memory() -> Result<Self, DatabaseError> {
-        let conn = Connection::open_in_memory()
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+        let conn =
+            Connection::open_in_memory().map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
         let mut store = Self { conn };
         store.create_tables()?;
         Ok(store)
@@ -229,7 +228,9 @@ impl VulnStore {
         }
 
         let Some(last) = newest_update else {
-            eprintln!("WARNING: Vulnerability database has never been updated. Run `looking-glass db update` or `looking-glass db build`.");
+            eprintln!(
+                "WARNING: Vulnerability database has never been updated. Run `looking-glass db update` or `looking-glass db build`."
+            );
             return;
         };
 
@@ -257,7 +258,22 @@ impl VulnStore {
             .unwrap_or(0) as usize
     }
 
+    /// Delete all data for a given source (e.g., "osv" or "nvd").
+    /// Call this before a full re-import to avoid per-record delete overhead.
+    pub fn clear_source(&mut self, source: &str) -> Result<(), DatabaseError> {
+        self.conn
+            .execute_batch(&format!(
+                "DELETE FROM affected_ranges WHERE affected_id IN
+                 (SELECT id FROM affected_packages WHERE vuln_source = '{source}');
+                 DELETE FROM affected_packages WHERE vuln_source = '{source}';
+                 DELETE FROM vulnerabilities WHERE source = '{source}';",
+            ))
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
+    }
+
     /// Insert a slice of vulnerability records in a single transaction.
+    /// For best performance on full imports, call `clear_source()` first
+    /// to avoid per-record cleanup overhead.
     pub fn insert_vulnerabilities(&mut self, records: &[VulnRecord]) -> Result<(), DatabaseError> {
         // SAFETY: we hold &mut self so no concurrent access is possible.
         let tx = self
@@ -266,20 +282,6 @@ impl VulnStore {
             .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
 
         for record in records {
-            // Clean up old affected_packages and their ranges for this (id, source) pair.
-            // Scoped by source so OSV re-import doesn't delete NVD data for the same CVE.
-            tx.execute(
-                "DELETE FROM affected_ranges WHERE affected_id IN
-                 (SELECT id FROM affected_packages WHERE vuln_id = ?1 AND vuln_source = ?2)",
-                params![record.id, record.source],
-            )
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-            tx.execute(
-                "DELETE FROM affected_packages WHERE vuln_id = ?1 AND vuln_source = ?2",
-                params![record.id, record.source],
-            )
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-
             tx.execute(
                 "INSERT OR REPLACE INTO vulnerabilities
                  (id, summary, details, severity, published, modified, withdrawn, source, cvss_score)
@@ -319,7 +321,8 @@ impl VulnStore {
             }
         }
 
-        tx.commit().map_err(|e| DatabaseError::Sqlite(e.to_string()))
+        tx.commit()
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
     }
 
     /// Query vulnerabilities affecting the given ecosystem and package name.
@@ -358,8 +361,17 @@ impl VulnStore {
 
         let mut results = Vec::new();
         for row in rows {
-            let (id, summary, details, severity_str, published, modified, affected_id, source, cvss_score) =
-                row.map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
+            let (
+                id,
+                summary,
+                details,
+                severity_str,
+                published,
+                modified,
+                affected_id,
+                source,
+                cvss_score,
+            ) = row.map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
 
             let severity = parse_severity_str(&severity_str);
             let ranges = self.query_ranges(affected_id as i64)?;
@@ -436,7 +448,11 @@ fn parse_iso8601_to_epoch(s: &str) -> Result<u64, ()> {
     // Rough epoch calculation (ignoring leap seconds, good enough for staleness checks)
     let mut days: u64 = 0;
     for y in 1970..year {
-        days += if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) { 366 } else { 365 };
+        days += if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+            366
+        } else {
+            365
+        };
     }
     let month_days: [u64; 12] = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
         [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]

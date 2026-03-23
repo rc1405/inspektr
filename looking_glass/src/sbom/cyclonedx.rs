@@ -53,8 +53,7 @@ impl SbomFormat for CycloneDxFormat {
             components,
         };
 
-        serde_json::to_vec_pretty(&doc)
-            .map_err(|e| SbomFormatError::EncodeFailed(e.to_string()))
+        serde_json::to_vec_pretty(&doc).map_err(|e| SbomFormatError::EncodeFailed(e.to_string()))
     }
 
     fn decode(&self, data: &[u8]) -> Result<Sbom, SbomFormatError> {
@@ -87,6 +86,12 @@ impl SbomFormat for CycloneDxFormat {
                     Ecosystem::Ruby
                 } else if comp.purl.starts_with("pkg:swift/") {
                     Ecosystem::Swift
+                } else if comp.purl.starts_with("pkg:deb/") {
+                    Ecosystem::Debian
+                } else if comp.purl.starts_with("pkg:apk/") {
+                    Ecosystem::Alpine
+                } else if comp.purl.starts_with("pkg:rpm/") {
+                    Ecosystem::RedHat
                 } else {
                     Ecosystem::Go // fallback
                 };
@@ -164,7 +169,9 @@ mod tests {
         );
         assert_eq!(doc["version"], 1);
 
-        let components = doc["components"].as_array().expect("components must be array");
+        let components = doc["components"]
+            .as_array()
+            .expect("components must be array");
         assert_eq!(components.len(), 2);
 
         let first = &components[0];
@@ -197,7 +204,10 @@ mod tests {
     fn test_decode_invalid_json() {
         let fmt = CycloneDxFormat;
         let result = fmt.decode(b"this is not valid json at all }{");
-        assert!(result.is_err(), "decoding invalid JSON must return an error");
+        assert!(
+            result.is_err(),
+            "decoding invalid JSON must return an error"
+        );
         match result.unwrap_err() {
             SbomFormatError::DecodeFailed(_) => {}
             other => panic!("expected DecodeFailed, got: {other:?}"),

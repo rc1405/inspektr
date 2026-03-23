@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
-use super::Cataloger;
+use std::collections::HashMap;
 
 pub struct ConanCataloger;
 
 impl Cataloger for ConanCataloger {
-    fn name(&self) -> &str { "conan" }
+    fn name(&self) -> &str {
+        "conan"
+    }
 
     fn can_catalog(&self, files: &[FileEntry]) -> bool {
         files.iter().any(|f| {
@@ -52,8 +54,8 @@ fn make_conan_package(name: &str, version: &str) -> Package {
 /// Parse a conan.lock file (Conan 2.x JSON format).
 /// The `requires` array contains entries like "zlib/1.3.0#hash" or "boost/1.82.0".
 pub fn parse_conan_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
-    let doc: serde_json::Value = serde_json::from_str(content)
-        .map_err(|e| CatalogerError::ParseFailed {
+    let doc: serde_json::Value =
+        serde_json::from_str(content).map_err(|e| CatalogerError::ParseFailed {
             file: "conan.lock".to_string(),
             reason: e.to_string(),
         })?;
@@ -85,8 +87,8 @@ pub fn parse_conan_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::{FileContents, FileEntry};
+    use std::path::PathBuf;
 
     fn text_entry(path: &str, content: &str) -> FileEntry {
         FileEntry {
@@ -115,8 +117,14 @@ mod tests {
         let content = r#"{"version":"0.5","requires":["zlib/1.3.0#abc123","boost/1.82.0#def456"]}"#;
         let pkgs = parse_conan_lock(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "zlib" && p.version == "1.3.0"));
-        assert!(pkgs.iter().any(|p| p.name == "boost" && p.version == "1.82.0"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "zlib" && p.version == "1.3.0")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "boost" && p.version == "1.82.0")
+        );
         assert!(pkgs.iter().all(|p| p.ecosystem == Ecosystem::Conan));
     }
 

@@ -1,5 +1,5 @@
-use std::path::Path;
 use crate::oci::ImageReference;
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetType {
@@ -53,10 +53,7 @@ mod tests {
             detect_target_type("test-fixtures/javascript/"),
             TargetType::Filesystem
         );
-        assert_eq!(
-            detect_target_type("myorg/myrepo"),
-            TargetType::Filesystem
-        );
+        assert_eq!(detect_target_type("myorg/myrepo"), TargetType::Filesystem);
     }
 
     #[test]

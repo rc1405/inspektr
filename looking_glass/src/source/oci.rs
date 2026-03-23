@@ -1,9 +1,9 @@
 //! OCI container image source.
 
+use super::Source;
 use crate::error::SourceError;
 use crate::models::{FileEntry, SourceMetadata};
 use crate::oci::pull::pull_and_extract_image;
-use super::Source;
 
 /// A source that pulls and extracts files from an OCI container image.
 pub struct OciImageSource {

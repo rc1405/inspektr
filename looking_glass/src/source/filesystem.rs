@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
+use super::Source;
 use crate::error::SourceError;
 use crate::models::{FileContents, FileEntry, SourceMetadata};
-use super::Source;
 
 /// Reads files from a local directory.
 pub struct FilesystemSource {
@@ -112,7 +112,12 @@ mod tests {
 
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].path, file_path);
-        assert!(files[0].as_text().unwrap().contains("module example.com/foo"));
+        assert!(
+            files[0]
+                .as_text()
+                .unwrap()
+                .contains("module example.com/foo")
+        );
     }
 
     #[test]
@@ -184,6 +189,11 @@ mod tests {
         let files = source.files().unwrap();
 
         assert_eq!(files.len(), 1);
-        assert!(files[0].as_text().unwrap().contains("module example.com/app"));
+        assert!(
+            files[0]
+                .as_text()
+                .unwrap()
+                .contains("module example.com/app")
+        );
     }
 }

@@ -3,6 +3,7 @@ pub mod dotnet;
 pub mod golang;
 pub mod java;
 pub mod javascript;
+pub mod os;
 pub mod php;
 pub mod python;
 pub mod ruby;

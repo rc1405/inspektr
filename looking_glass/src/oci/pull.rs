@@ -5,9 +5,9 @@ use std::path::Path;
 
 use flate2::read::GzDecoder;
 use oci_distribution::{
+    Client, Reference,
     client::{ClientConfig, ClientProtocol},
     manifest::OciManifest,
-    Client, Reference,
 };
 
 use crate::error::OciError;
@@ -21,11 +21,14 @@ use super::resolve_auth;
 /// This is used for pulling the vulnerability DB artifact stored as a single-layer
 /// OCI artifact.
 pub fn pull_artifact(reference_str: &str, output_path: &Path) -> Result<(), OciError> {
-    let reference: Reference = reference_str.parse().map_err(|e: oci_distribution::ParseError| {
-        OciError::InvalidReference {
-            reference: format!("{}: {}", reference_str, e),
-        }
-    })?;
+    let reference: Reference =
+        reference_str
+            .parse()
+            .map_err(
+                |e: oci_distribution::ParseError| OciError::InvalidReference {
+                    reference: format!("{}: {}", reference_str, e),
+                },
+            )?;
 
     let auth = resolve_auth(reference.registry());
 
@@ -45,13 +48,14 @@ pub fn pull_artifact(reference_str: &str, output_path: &Path) -> Result<(), OciE
         let client = Client::new(config);
 
         // Pull the manifest (returns OciManifest enum)
-        let (manifest, _digest) = client
-            .pull_manifest(&reference, &auth)
-            .await
-            .map_err(|e| OciError::PullFailed {
-                reference: reference_str.to_string(),
-                reason: e.to_string(),
-            })?;
+        let (manifest, _digest) =
+            client
+                .pull_manifest(&reference, &auth)
+                .await
+                .map_err(|e| OciError::PullFailed {
+                    reference: reference_str.to_string(),
+                    reason: e.to_string(),
+                })?;
 
         // Extract the image manifest layers
         let layers = match &manifest {
@@ -60,7 +64,7 @@ pub fn pull_artifact(reference_str: &str, output_path: &Path) -> Result<(), OciE
                 return Err(OciError::PullFailed {
                     reference: reference_str.to_string(),
                     reason: "image index manifests are not supported for artifact pull".to_string(),
-                })
+                });
             }
         };
 
@@ -82,7 +86,11 @@ pub fn pull_artifact(reference_str: &str, output_path: &Path) -> Result<(), OciE
         // Write to output path
         std::fs::write(output_path, &blob_data).map_err(|e| OciError::PullFailed {
             reference: reference_str.to_string(),
-            reason: format!("failed to write artifact to {}: {}", output_path.display(), e),
+            reason: format!(
+                "failed to write artifact to {}: {}",
+                output_path.display(),
+                e
+            ),
         })?;
 
         Ok(())
@@ -95,11 +103,14 @@ pub fn pull_artifact(reference_str: &str, output_path: &Path) -> Result<(), OciE
 /// Layers are decompressed and extracted from gzip+tar format.
 /// Whiteout files (`.wh.`) and directories are skipped.
 pub fn pull_and_extract_image(reference_str: &str) -> Result<Vec<FileEntry>, OciError> {
-    let reference: Reference = reference_str.parse().map_err(|e: oci_distribution::ParseError| {
-        OciError::InvalidReference {
-            reference: format!("{}: {}", reference_str, e),
-        }
-    })?;
+    let reference: Reference =
+        reference_str
+            .parse()
+            .map_err(
+                |e: oci_distribution::ParseError| OciError::InvalidReference {
+                    reference: format!("{}: {}", reference_str, e),
+                },
+            )?;
 
     let auth = resolve_auth(reference.registry());
 

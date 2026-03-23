@@ -1,5 +1,5 @@
-use super::ResolvedCpe;
 use super::CpeFields;
+use super::ResolvedCpe;
 
 /// Try to resolve the ecosystem from the `target_sw` field.
 /// Recognized mappings:

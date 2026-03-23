@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use super::SbomFormat;
 use crate::error::SbomFormatError;
 use crate::models::{Ecosystem, Package, Sbom, SourceMetadata};
-use super::SbomFormat;
 
 // ---------------------------------------------------------------------------
 // SPDX 2.3 JSON document structures
@@ -88,10 +88,7 @@ impl SbomFormat for SpdxFormat {
             data_license: "CC0-1.0".to_string(),
             spdx_id: "SPDXRef-DOCUMENT".to_string(),
             name: "looking-glass-sbom".to_string(),
-            document_namespace: format!(
-                "https://looking-glass.dev/spdxdocs/{}",
-                Uuid::new_v4()
-            ),
+            document_namespace: format!("https://looking-glass.dev/spdxdocs/{}", Uuid::new_v4()),
             creation_info: SpdxCreationInfo {
                 created: now,
                 creators: vec!["Tool: looking-glass".to_string()],
@@ -100,8 +97,7 @@ impl SbomFormat for SpdxFormat {
             packages,
         };
 
-        serde_json::to_vec_pretty(&doc)
-            .map_err(|e| SbomFormatError::EncodeFailed(e.to_string()))
+        serde_json::to_vec_pretty(&doc).map_err(|e| SbomFormatError::EncodeFailed(e.to_string()))
     }
 
     fn decode(&self, data: &[u8]) -> Result<Sbom, SbomFormatError> {
@@ -166,6 +162,12 @@ fn ecosystem_from_purl(purl: &str) -> Ecosystem {
         Ecosystem::Ruby
     } else if purl.starts_with("pkg:swift/") {
         Ecosystem::Swift
+    } else if purl.starts_with("pkg:deb/") {
+        Ecosystem::Debian
+    } else if purl.starts_with("pkg:apk/") {
+        Ecosystem::Alpine
+    } else if purl.starts_with("pkg:rpm/") {
+        Ecosystem::RedHat
     } else {
         Ecosystem::Go // fallback
     }
@@ -270,10 +272,19 @@ mod tests {
         assert_eq!(doc["spdxVersion"], "SPDX-2.3");
         assert_eq!(doc["dataLicense"], "CC0-1.0");
         assert_eq!(doc["SPDXID"], "SPDXRef-DOCUMENT");
-        assert!(doc["documentNamespace"].as_str().unwrap().starts_with("https://looking-glass.dev/spdxdocs/"));
+        assert!(
+            doc["documentNamespace"]
+                .as_str()
+                .unwrap()
+                .starts_with("https://looking-glass.dev/spdxdocs/")
+        );
 
         let creators = doc["creationInfo"]["creators"].as_array().unwrap();
-        assert!(creators.iter().any(|c| c.as_str().unwrap().contains("looking-glass")));
+        assert!(
+            creators
+                .iter()
+                .any(|c| c.as_str().unwrap().contains("looking-glass"))
+        );
 
         let packages = doc["packages"].as_array().unwrap();
         assert_eq!(packages.len(), 2);

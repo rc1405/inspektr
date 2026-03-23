@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
-use super::Cataloger;
+use std::collections::HashMap;
 
 pub struct JavaScriptCataloger;
 
 impl Cataloger for JavaScriptCataloger {
-    fn name(&self) -> &str { "javascript" }
+    fn name(&self) -> &str {
+        "javascript"
+    }
     fn can_catalog(&self, files: &[FileEntry]) -> bool {
         files.iter().any(|f| {
             let name = f.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -20,15 +22,29 @@ impl Cataloger for JavaScriptCataloger {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             let source = file_name.to_string();
             let parsed = match file_name {
-                "package-lock.json" => { if let Some(text) = file.as_text() { parse_package_lock(text)? } else { continue; } }
-                "yarn.lock" => { if let Some(text) = file.as_text() { parse_yarn_lock(text)? } else { continue; } }
+                "package-lock.json" => {
+                    if let Some(text) = file.as_text() {
+                        parse_package_lock(text)?
+                    } else {
+                        continue;
+                    }
+                }
+                "yarn.lock" => {
+                    if let Some(text) = file.as_text() {
+                        parse_yarn_lock(text)?
+                    } else {
+                        continue;
+                    }
+                }
                 _ => continue,
             };
             for mut pkg in parsed {
                 pkg.metadata.insert("source".to_string(), source.clone());
                 pkg.source_file = Some(file.path.display().to_string());
                 let key = format!("{}@{}", pkg.name, pkg.version);
-                if seen.insert(key) { packages.push(pkg); }
+                if seen.insert(key) {
+                    packages.push(pkg);
+                }
             }
         }
         Ok(packages)
@@ -38,7 +54,8 @@ impl Cataloger for JavaScriptCataloger {
 fn make_js_package(name: &str, version: &str) -> Package {
     let purl_name = name.replace('@', "%40");
     Package {
-        name: name.to_string(), version: version.to_string(),
+        name: name.to_string(),
+        version: version.to_string(),
         ecosystem: Ecosystem::JavaScript,
         purl: format!("pkg:npm/{}@{}", purl_name, version),
         metadata: HashMap::new(),
@@ -47,13 +64,22 @@ fn make_js_package(name: &str, version: &str) -> Package {
 }
 
 pub fn parse_package_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
-    let doc: serde_json::Value = serde_json::from_str(content)
-        .map_err(|e| CatalogerError::ParseFailed { file: "package-lock.json".to_string(), reason: e.to_string() })?;
+    let doc: serde_json::Value =
+        serde_json::from_str(content).map_err(|e| CatalogerError::ParseFailed {
+            file: "package-lock.json".to_string(),
+            reason: e.to_string(),
+        })?;
     let mut packages = Vec::new();
     if let Some(pkgs) = doc.get("packages").and_then(|v| v.as_object()) {
         for (key, value) in pkgs {
-            let name = if let Some(stripped) = key.strip_prefix("node_modules/") { stripped } else { continue; };
-            if name.is_empty() { continue; }
+            let name = if let Some(stripped) = key.strip_prefix("node_modules/") {
+                stripped
+            } else {
+                continue;
+            };
+            if name.is_empty() {
+                continue;
+            }
             if let Some(version) = value.get("version").and_then(|v| v.as_str()) {
                 packages.push(make_js_package(name, version));
             }
@@ -73,7 +99,9 @@ pub fn parse_yarn_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
     let mut current_name: Option<String> = None;
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
         if !line.starts_with(' ') && trimmed.ends_with(':') {
             let header = trimmed.trim_end_matches(':').trim_matches('"');
             if let Some(at_pos) = header.rfind('@').filter(|&p| p > 0) {
@@ -81,8 +109,13 @@ pub fn parse_yarn_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
             }
         } else if trimmed.starts_with("version \"") {
             if let Some(name) = current_name.take() {
-                let version = trimmed.strip_prefix("version \"").and_then(|s| s.strip_suffix('"')).unwrap_or("");
-                if !version.is_empty() { packages.push(make_js_package(&name, version)); }
+                let version = trimmed
+                    .strip_prefix("version \"")
+                    .and_then(|s| s.strip_suffix('"'))
+                    .unwrap_or("");
+                if !version.is_empty() {
+                    packages.push(make_js_package(&name, version));
+                }
             }
         }
     }
@@ -96,8 +129,8 @@ pub fn parse_yarn_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::{FileContents, FileEntry};
+    use std::path::PathBuf;
 
     fn text_entry(path: &str, content: &str) -> FileEntry {
         FileEntry {
@@ -108,9 +141,7 @@ mod tests {
 
     #[test]
     fn test_can_catalog_with_package_lock() {
-        let files = vec![
-            text_entry("/project/package-lock.json", "{}"),
-        ];
+        let files = vec![text_entry("/project/package-lock.json", "{}")];
         assert!(JavaScriptCataloger.can_catalog(&files));
     }
 
@@ -137,8 +168,14 @@ mod tests {
 }"#;
         let pkgs = parse_package_lock(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "express" && p.version == "4.18.2"));
-        assert!(pkgs.iter().any(|p| p.name == "lodash" && p.version == "4.17.21"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "express" && p.version == "4.18.2")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "lodash" && p.version == "4.17.21")
+        );
         assert!(pkgs.iter().all(|p| p.ecosystem == Ecosystem::JavaScript));
     }
 
@@ -155,8 +192,14 @@ mod tests {
 }"#;
         let pkgs = parse_package_lock(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "express" && p.version == "4.18.2"));
-        assert!(pkgs.iter().any(|p| p.name == "lodash" && p.version == "4.17.21"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "express" && p.version == "4.18.2")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "lodash" && p.version == "4.17.21")
+        );
     }
 
     #[test]
@@ -175,8 +218,14 @@ lodash@^4.17.0:
 "#;
         let pkgs = parse_yarn_lock(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "express" && p.version == "4.18.2"));
-        assert!(pkgs.iter().any(|p| p.name == "lodash" && p.version == "4.17.21"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "express" && p.version == "4.18.2")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "lodash" && p.version == "4.17.21")
+        );
     }
 
     #[test]
@@ -209,7 +258,10 @@ lodash@^4.17.0:
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].name, "express");
         assert_eq!(pkgs[0].version, "4.18.2");
-        assert_eq!(pkgs[0].metadata.get("source").map(|s| s.as_str()), Some("package-lock.json"));
+        assert_eq!(
+            pkgs[0].metadata.get("source").map(|s| s.as_str()),
+            Some("package-lock.json")
+        );
     }
 
     #[test]
@@ -225,6 +277,9 @@ lodash@^4.17.0:
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].name, "lodash");
         assert_eq!(pkgs[0].version, "4.17.21");
-        assert_eq!(pkgs[0].metadata.get("source").map(|s| s.as_str()), Some("yarn.lock"));
+        assert_eq!(
+            pkgs[0].metadata.get("source").map(|s| s.as_str()),
+            Some("yarn.lock")
+        );
     }
 }

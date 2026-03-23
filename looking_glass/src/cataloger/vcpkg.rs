@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
-use super::Cataloger;
+use std::collections::HashMap;
 
 pub struct VcpkgCataloger;
 
 impl Cataloger for VcpkgCataloger {
-    fn name(&self) -> &str { "vcpkg" }
+    fn name(&self) -> &str {
+        "vcpkg"
+    }
 
     fn can_catalog(&self, files: &[FileEntry]) -> bool {
         files.iter().any(|f| {
@@ -52,8 +54,8 @@ fn make_vcpkg_package(name: &str, version: &str) -> Package {
 /// Parse a vcpkg.json manifest file.
 /// Dependencies can be strings (no version, skip) or objects with `name` and `version>=`.
 pub fn parse_vcpkg_json(content: &str) -> Result<Vec<Package>, CatalogerError> {
-    let doc: serde_json::Value = serde_json::from_str(content)
-        .map_err(|e| CatalogerError::ParseFailed {
+    let doc: serde_json::Value =
+        serde_json::from_str(content).map_err(|e| CatalogerError::ParseFailed {
             file: "vcpkg.json".to_string(),
             reason: e.to_string(),
         })?;
@@ -84,8 +86,8 @@ pub fn parse_vcpkg_json(content: &str) -> Result<Vec<Package>, CatalogerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::{FileContents, FileEntry};
+    use std::path::PathBuf;
 
     fn text_entry(path: &str, content: &str) -> FileEntry {
         FileEntry {
@@ -114,8 +116,14 @@ mod tests {
         let content = r#"{"name":"app","dependencies":["zlib",{"name":"boost","version>=":"1.82.0"},{"name":"fmt","version>=":"10.1.0"}]}"#;
         let pkgs = parse_vcpkg_json(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "boost" && p.version == "1.82.0"));
-        assert!(pkgs.iter().any(|p| p.name == "fmt" && p.version == "10.1.0"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "boost" && p.version == "1.82.0")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "fmt" && p.version == "10.1.0")
+        );
         assert!(pkgs.iter().all(|p| p.ecosystem == Ecosystem::Vcpkg));
     }
 

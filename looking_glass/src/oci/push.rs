@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use oci_distribution::{
-    client::{ClientConfig, ClientProtocol, Config, ImageLayer},
     Reference,
+    client::{ClientConfig, ClientProtocol, Config, ImageLayer},
 };
 
 use crate::error::OciError;
@@ -19,11 +19,14 @@ pub fn push_artifact(
     file_path: &Path,
     media_type: &str,
 ) -> Result<(), OciError> {
-    let reference: Reference = reference_str.parse().map_err(|e: oci_distribution::ParseError| {
-        OciError::InvalidReference {
-            reference: format!("{}: {}", reference_str, e),
-        }
-    })?;
+    let reference: Reference =
+        reference_str
+            .parse()
+            .map_err(
+                |e: oci_distribution::ParseError| OciError::InvalidReference {
+                    reference: format!("{}: {}", reference_str, e),
+                },
+            )?;
 
     let auth = resolve_auth(reference.registry());
 

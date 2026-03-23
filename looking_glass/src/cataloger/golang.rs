@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
-use super::Cataloger;
+use std::collections::HashMap;
 
 /// Magic bytes found in Go binaries that contain build information.
 pub const GO_BUILDINFO_MAGIC: &[u8] = b"\xff Go buildinf:";
@@ -29,7 +29,8 @@ impl Cataloger for GoCataloger {
             if file_name == "go.mod" {
                 if let Some(text) = file.as_text() {
                     for mut pkg in parse_go_mod(text)? {
-                        pkg.metadata.insert("source".to_string(), "go.mod".to_string());
+                        pkg.metadata
+                            .insert("source".to_string(), "go.mod".to_string());
                         pkg.source_file = Some(file.path.display().to_string());
                         let key = format!("{}@{}", pkg.name, pkg.version);
                         if seen.insert(key) {
@@ -40,7 +41,8 @@ impl Cataloger for GoCataloger {
             } else if file_name == "go.sum" {
                 if let Some(text) = file.as_text() {
                     for mut pkg in parse_go_sum(text)? {
-                        pkg.metadata.insert("source".to_string(), "go.sum".to_string());
+                        pkg.metadata
+                            .insert("source".to_string(), "go.sum".to_string());
                         pkg.source_file = Some(file.path.display().to_string());
                         let key = format!("{}@{}", pkg.name, pkg.version);
                         if seen.insert(key) {
@@ -56,7 +58,8 @@ impl Cataloger for GoCataloger {
             if is_go_binary(file) {
                 if let Some(text) = extract_buildinfo_from_binary(file.as_bytes()) {
                     for mut pkg in parse_buildinfo_text(&text)? {
-                        pkg.metadata.insert("source".to_string(), "binary".to_string());
+                        pkg.metadata
+                            .insert("source".to_string(), "binary".to_string());
                         pkg.source_file = Some(file.path.display().to_string());
                         let key = format!("{}@{}", pkg.name, pkg.version);
                         if seen.insert(key) {
@@ -272,8 +275,8 @@ pub fn parse_go_sum(text: &str) -> Result<Vec<Package>, CatalogerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::{FileContents, FileEntry};
+    use std::path::PathBuf;
 
     fn text_file(path: &str, content: &str) -> FileEntry {
         FileEntry {
@@ -328,9 +331,7 @@ require github.com/pkg/errors v0.9.1
 
     #[test]
     fn test_can_catalog_with_go_files() {
-        let files = vec![
-            text_file("/project/go.mod", "module example.com/app\n"),
-        ];
+        let files = vec![text_file("/project/go.mod", "module example.com/app\n")];
         assert!(GoCataloger.can_catalog(&files));
     }
 
@@ -357,10 +358,19 @@ require (
         let files = vec![text_file("/project/go.mod", go_mod_content)];
         let pkgs = GoCataloger.catalog(&files).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "github.com/stretchr/testify" && p.version == "v1.8.4"));
-        assert!(pkgs.iter().any(|p| p.name == "golang.org/x/net" && p.version == "v0.20.0"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "github.com/stretchr/testify" && p.version == "v1.8.4")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "golang.org/x/net" && p.version == "v0.20.0")
+        );
         // All packages should be tagged with source=go.mod
-        assert!(pkgs.iter().all(|p| p.metadata.get("source").map(|s| s.as_str()) == Some("go.mod")));
+        assert!(
+            pkgs.iter()
+                .all(|p| p.metadata.get("source").map(|s| s.as_str()) == Some("go.mod"))
+        );
     }
 
     #[test]
@@ -373,8 +383,14 @@ golang.org/x/net v0.20.0/go.mod h1:z8BVo6P=
         let pkgs = parse_go_sum(content).unwrap();
         // Each module should appear only once despite two lines per version
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "github.com/stretchr/testify" && p.version == "v1.8.4"));
-        assert!(pkgs.iter().any(|p| p.name == "golang.org/x/net" && p.version == "v0.20.0"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "github.com/stretchr/testify" && p.version == "v1.8.4")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "golang.org/x/net" && p.version == "v0.20.0")
+        );
     }
 
     #[test]
@@ -387,7 +403,10 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].name, "github.com/pkg/errors");
         assert_eq!(pkgs[0].version, "v0.9.1");
-        assert_eq!(pkgs[0].metadata.get("source").map(|s| s.as_str()), Some("go.sum"));
+        assert_eq!(
+            pkgs[0].metadata.get("source").map(|s| s.as_str()),
+            Some("go.sum")
+        );
     }
 
     // ------------------------------------------------------------------
@@ -399,8 +418,14 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
         let text = "path\texample.com/myapp\nmod\texample.com/myapp\tv1.0.0\ndep\tgithub.com/stretchr/testify\tv1.8.4\th1:abc123\ndep\tgolang.org/x/net\tv0.20.0\n";
         let pkgs = parse_buildinfo_text(text).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "github.com/stretchr/testify" && p.version == "v1.8.4"));
-        assert!(pkgs.iter().any(|p| p.name == "golang.org/x/net" && p.version == "v0.20.0"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "github.com/stretchr/testify" && p.version == "v1.8.4")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "golang.org/x/net" && p.version == "v0.20.0")
+        );
     }
 
     #[test]
@@ -437,15 +462,26 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
         let pkgs = GoCataloger.catalog(&files).unwrap();
 
         assert!(!pkgs.is_empty(), "should find packages in binary");
-        assert!(pkgs.iter().any(|p| p.name == "github.com/some/lib" && p.version == "v2.3.4"));
-        assert!(pkgs.iter().all(|p| p.metadata.get("source").map(|s| s.as_str()) == Some("binary")));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "github.com/some/lib" && p.version == "v2.3.4")
+        );
+        assert!(
+            pkgs.iter()
+                .all(|p| p.metadata.get("source").map(|s| s.as_str()) == Some("binary"))
+        );
     }
 
     #[test]
     fn test_catalog_sets_source_file() {
-        let files = vec![text_file("/project/subdir/go.mod",
-            "module example.com/app\n\ngo 1.21\n\nrequire github.com/pkg/errors v0.9.1\n")];
+        let files = vec![text_file(
+            "/project/subdir/go.mod",
+            "module example.com/app\n\ngo 1.21\n\nrequire github.com/pkg/errors v0.9.1\n",
+        )];
         let pkgs = GoCataloger.catalog(&files).unwrap();
-        assert_eq!(pkgs[0].source_file, Some("/project/subdir/go.mod".to_string()));
+        assert_eq!(
+            pkgs[0].source_file,
+            Some("/project/subdir/go.mod".to_string())
+        );
     }
 }

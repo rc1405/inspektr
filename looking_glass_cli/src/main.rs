@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use looking_glass::models::Severity;
 use looking_glass::pipeline;
@@ -169,8 +169,7 @@ fn cmd_sbom(target: &str, output: Option<&std::path::Path>, format: &str) -> Res
             eprintln!("SBOM written to {}", path.display());
         }
         None => {
-            let text =
-                String::from_utf8(bytes).context("SBOM output is not valid UTF-8")?;
+            let text = String::from_utf8(bytes).context("SBOM output is not valid UTF-8")?;
             print!("{}", text);
         }
     }
@@ -192,17 +191,19 @@ fn cmd_vuln(
     };
 
     let sbom_str = sbom.map(|p| p.to_string_lossy().into_owned());
-    let scan_report = pipeline::scan_and_report(
-        target,
-        sbom_str.as_deref(),
-        &db_path,
-    )
-    .with_context(|| "Failed to scan for vulnerabilities")?;
+    let scan_report = pipeline::scan_and_report(target, sbom_str.as_deref(), &db_path)
+        .with_context(|| "Failed to scan for vulnerabilities")?;
 
     // Determine format: explicit flag > default based on output
     let fmt = match format {
         Some(f) => f,
-        None => if output.is_some() { "json" } else { "table" },
+        None => {
+            if output.is_some() {
+                "json"
+            } else {
+                "table"
+            }
+        }
     };
 
     let rendered = match fmt {
@@ -268,8 +269,8 @@ fn cmd_db_clean() -> Result<()> {
 
 #[cfg(feature = "db-admin")]
 fn cmd_db_build(ecosystem: Option<&str>, output: Option<&std::path::Path>) -> Result<()> {
-    use looking_glass::db::{normalize_ecosystem, vuln_sources};
     use looking_glass::db::store::VulnStore;
+    use looking_glass::db::{normalize_ecosystem, vuln_sources};
 
     let db_path = output
         .map(|p| p.to_path_buf())
@@ -283,23 +284,21 @@ fn cmd_db_build(ecosystem: Option<&str>, output: Option<&std::path::Path>) -> Re
     // Normalize ecosystem if provided
     let ecosystem = match ecosystem {
         Some(eco) => {
-            let normalized = normalize_ecosystem(eco)
-                .ok_or_else(|| anyhow::anyhow!(
-                    "Unknown ecosystem: '{}'. Supported: Go, npm, PyPI, Maven", eco
-                ))?;
+            let normalized = normalize_ecosystem(eco).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Unknown ecosystem: '{}'. Supported: Go, npm, PyPI, Maven",
+                    eco
+                )
+            })?;
             Some(normalized)
         }
         None => None,
     };
 
-    eprintln!(
-        "Building vulnerability database at {} …",
-        db_path.display()
-    );
+    eprintln!("Building vulnerability database at {} …", db_path.display());
 
     let db_str = db_path.to_string_lossy();
-    let mut store =
-        VulnStore::open(&db_str).context("Failed to open vulnerability database")?;
+    let mut store = VulnStore::open(&db_str).context("Failed to open vulnerability database")?;
 
     let mut total = 0;
     for source in vuln_sources() {

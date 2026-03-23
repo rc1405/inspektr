@@ -24,9 +24,32 @@ pub trait VulnSource {
 
 /// All known ecosystem strings (canonical form).
 #[cfg(feature = "db-admin")]
+/// Ecosystems with confirmed OSV bulk download availability.
+/// Ecosystems not listed here (e.g., ConanCenter, Oracle, CentOS, CoreOS,
+/// Bottlerocket, Photon OS, Azure Linux) have no OSV bulk data.
 pub const ALL_ECOSYSTEMS: &[&str] = &[
-    "Go", "npm", "PyPI", "Maven",
-    "ConanCenter", "NuGet", "Packagist", "crates.io", "RubyGems", "SwiftURL",
+    // Language ecosystems
+    "Go",
+    "npm",
+    "PyPI",
+    "Maven",
+    "NuGet",
+    "Packagist",
+    "crates.io",
+    "RubyGems",
+    "SwiftURL",
+    // OS ecosystems
+    "Alpine",
+    "Wolfi",
+    "Chainguard",
+    "Debian",
+    "Ubuntu",
+    "Red Hat",
+    "Rocky Linux",
+    "AlmaLinux",
+    "SUSE",
+    "Echo",
+    "MinimOS",
 ];
 
 /// Normalize an ecosystem string to canonical form (case-insensitive match).
@@ -41,10 +64,7 @@ pub fn normalize_ecosystem(input: &str) -> Option<&'static str> {
 /// Return all registered vulnerability sources.
 #[cfg(feature = "db-admin")]
 pub fn vuln_sources() -> Vec<Box<dyn VulnSource>> {
-    vec![
-        Box::new(osv::OsvSource),
-        Box::new(nvd::NvdSource::new()),
-    ]
+    vec![Box::new(osv::OsvSource), Box::new(nvd::NvdSource::new())]
 }
 
 #[cfg(all(test, feature = "db-admin"))]

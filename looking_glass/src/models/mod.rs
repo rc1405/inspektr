@@ -56,6 +56,27 @@ pub enum Ecosystem {
     Rust,
     Ruby,
     Swift,
+    // OS distributions — apk-based
+    Alpine,
+    Wolfi,
+    Chainguard,
+    // OS distributions — dpkg-based
+    Debian,
+    Ubuntu,
+    Distroless,
+    // OS distributions — rpm-based
+    RedHat,
+    CentOS,
+    Rocky,
+    AlmaLinux,
+    OracleLinux,
+    SUSE,
+    Photon,
+    AzureLinux,
+    CoreOS,
+    Bottlerocket,
+    Echo,
+    MinimOS,
 }
 
 impl Ecosystem {
@@ -72,6 +93,24 @@ impl Ecosystem {
             Ecosystem::Rust => "crates.io",
             Ecosystem::Ruby => "RubyGems",
             Ecosystem::Swift => "SwiftURL",
+            Ecosystem::Alpine => "Alpine",
+            Ecosystem::Wolfi => "Wolfi",
+            Ecosystem::Chainguard => "Chainguard",
+            Ecosystem::Debian => "Debian",
+            Ecosystem::Ubuntu => "Ubuntu",
+            Ecosystem::Distroless => "Debian",
+            Ecosystem::RedHat => "Red Hat",
+            Ecosystem::CentOS => "CentOS",
+            Ecosystem::Rocky => "Rocky Linux",
+            Ecosystem::AlmaLinux => "AlmaLinux",
+            Ecosystem::OracleLinux => "Oracle",
+            Ecosystem::SUSE => "SUSE",
+            Ecosystem::Photon => "Photon OS",
+            Ecosystem::AzureLinux => "Azure Linux",
+            Ecosystem::CoreOS => "CoreOS",
+            Ecosystem::Bottlerocket => "Bottlerocket",
+            Ecosystem::Echo => "Echo",
+            Ecosystem::MinimOS => "MinimOS",
         }
     }
 }
@@ -111,6 +150,32 @@ impl Package {
             Ecosystem::Rust => format!("pkg:cargo/{}@{}", self.name, self.version),
             Ecosystem::Ruby => format!("pkg:gem/{}@{}", self.name, self.version),
             Ecosystem::Swift => format!("pkg:swift/{}@{}", self.name, self.version),
+            // dpkg-based
+            Ecosystem::Debian | Ecosystem::Distroless => {
+                format!("pkg:deb/debian/{}@{}", self.name, self.version)
+            }
+            Ecosystem::Ubuntu => {
+                format!("pkg:deb/ubuntu/{}@{}", self.name, self.version)
+            }
+            // apk-based
+            Ecosystem::Alpine => format!("pkg:apk/alpine/{}@{}", self.name, self.version),
+            Ecosystem::Wolfi => format!("pkg:apk/wolfi/{}@{}", self.name, self.version),
+            Ecosystem::Chainguard => format!("pkg:apk/chainguard/{}@{}", self.name, self.version),
+            // rpm-based
+            Ecosystem::RedHat => format!("pkg:rpm/redhat/{}@{}", self.name, self.version),
+            Ecosystem::CentOS => format!("pkg:rpm/centos/{}@{}", self.name, self.version),
+            Ecosystem::Rocky => format!("pkg:rpm/rocky/{}@{}", self.name, self.version),
+            Ecosystem::AlmaLinux => format!("pkg:rpm/almalinux/{}@{}", self.name, self.version),
+            Ecosystem::OracleLinux => format!("pkg:rpm/oraclelinux/{}@{}", self.name, self.version),
+            Ecosystem::SUSE => format!("pkg:rpm/suse/{}@{}", self.name, self.version),
+            Ecosystem::Photon => format!("pkg:rpm/photon/{}@{}", self.name, self.version),
+            Ecosystem::AzureLinux => format!("pkg:rpm/azurelinux/{}@{}", self.name, self.version),
+            Ecosystem::CoreOS => format!("pkg:rpm/coreos/{}@{}", self.name, self.version),
+            Ecosystem::Bottlerocket => {
+                format!("pkg:rpm/bottlerocket/{}@{}", self.name, self.version)
+            }
+            Ecosystem::Echo => format!("pkg:rpm/echo/{}@{}", self.name, self.version),
+            Ecosystem::MinimOS => format!("pkg:rpm/minimos/{}@{}", self.name, self.version),
         }
     }
 }
@@ -259,7 +324,10 @@ mod tests {
             metadata: HashMap::new(),
             source_file: None,
         };
-        assert_eq!(pkg.to_purl(), "pkg:maven/org.apache.commons/commons-lang3@3.14.0");
+        assert_eq!(
+            pkg.to_purl(),
+            "pkg:maven/org.apache.commons/commons-lang3@3.14.0"
+        );
     }
 
     #[test]
@@ -271,6 +339,48 @@ mod tests {
         assert_eq!(Ecosystem::Rust.as_osv_ecosystem(), "crates.io");
         assert_eq!(Ecosystem::Ruby.as_osv_ecosystem(), "RubyGems");
         assert_eq!(Ecosystem::Swift.as_osv_ecosystem(), "SwiftURL");
+    }
+
+    #[test]
+    fn test_os_ecosystem_osv_names() {
+        assert_eq!(Ecosystem::Alpine.as_osv_ecosystem(), "Alpine");
+        assert_eq!(Ecosystem::Debian.as_osv_ecosystem(), "Debian");
+        assert_eq!(Ecosystem::Ubuntu.as_osv_ecosystem(), "Ubuntu");
+        assert_eq!(Ecosystem::RedHat.as_osv_ecosystem(), "Red Hat");
+        assert_eq!(Ecosystem::Distroless.as_osv_ecosystem(), "Debian");
+    }
+
+    #[test]
+    fn test_os_ecosystem_purls() {
+        let make_pkg = |name: &str, version: &str, ecosystem: Ecosystem| Package {
+            name: name.to_string(),
+            version: version.to_string(),
+            ecosystem,
+            purl: String::new(),
+            metadata: HashMap::new(),
+            source_file: None,
+        };
+
+        assert_eq!(
+            make_pkg("libc6", "2.36-9+deb12u3", Ecosystem::Debian).to_purl(),
+            "pkg:deb/debian/libc6@2.36-9+deb12u3"
+        );
+        assert_eq!(
+            make_pkg("libc6", "2.38-1ubuntu6", Ecosystem::Ubuntu).to_purl(),
+            "pkg:deb/ubuntu/libc6@2.38-1ubuntu6"
+        );
+        assert_eq!(
+            make_pkg("musl", "1.2.4-r2", Ecosystem::Alpine).to_purl(),
+            "pkg:apk/alpine/musl@1.2.4-r2"
+        );
+        assert_eq!(
+            make_pkg("glibc", "2.34-60.el9", Ecosystem::RedHat).to_purl(),
+            "pkg:rpm/redhat/glibc@2.34-60.el9"
+        );
+        assert_eq!(
+            make_pkg("base-files", "11.1+deb11u7", Ecosystem::Distroless).to_purl(),
+            "pkg:deb/debian/base-files@11.1+deb11u7"
+        );
     }
 
     #[test]

@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
-use super::Cataloger;
+use std::collections::HashMap;
 
 pub struct DotNetCataloger;
 
 impl Cataloger for DotNetCataloger {
-    fn name(&self) -> &str { "dotnet" }
+    fn name(&self) -> &str {
+        "dotnet"
+    }
 
     fn can_catalog(&self, files: &[FileEntry]) -> bool {
         files.iter().any(|f| {
@@ -22,11 +24,23 @@ impl Cataloger for DotNetCataloger {
         for file in files {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             let parsed = if file_name == "packages.lock.json" {
-                if let Some(text) = file.as_text() { parse_packages_lock_json(text)? } else { continue; }
+                if let Some(text) = file.as_text() {
+                    parse_packages_lock_json(text)?
+                } else {
+                    continue;
+                }
             } else if file_name.ends_with(".csproj") {
-                if let Some(text) = file.as_text() { parse_csproj(text)? } else { continue; }
+                if let Some(text) = file.as_text() {
+                    parse_csproj(text)?
+                } else {
+                    continue;
+                }
             } else if file_name == "packages.config" {
-                if let Some(text) = file.as_text() { parse_packages_config(text)? } else { continue; }
+                if let Some(text) = file.as_text() {
+                    parse_packages_config(text)?
+                } else {
+                    continue;
+                }
             } else {
                 continue;
             };
@@ -58,8 +72,8 @@ fn make_dotnet_package(name: &str, version: &str) -> Package {
 /// Parse packages.lock.json (NuGet lock file format).
 /// Structure: {"version":1,"dependencies":{"net8.0":{"PackageName":{"resolved":"1.2.3"}}}}
 pub fn parse_packages_lock_json(content: &str) -> Result<Vec<Package>, CatalogerError> {
-    let doc: serde_json::Value = serde_json::from_str(content)
-        .map_err(|e| CatalogerError::ParseFailed {
+    let doc: serde_json::Value =
+        serde_json::from_str(content).map_err(|e| CatalogerError::ParseFailed {
             file: "packages.lock.json".to_string(),
             reason: e.to_string(),
         })?;
@@ -93,7 +107,10 @@ pub fn parse_csproj(content: &str) -> Result<Vec<Package>, CatalogerError> {
         if !trimmed.contains("PackageReference") {
             continue;
         }
-        if let (Some(name), Some(version)) = (extract_attr(trimmed, "Include"), extract_attr(trimmed, "Version")) {
+        if let (Some(name), Some(version)) = (
+            extract_attr(trimmed, "Include"),
+            extract_attr(trimmed, "Version"),
+        ) {
             if !name.is_empty() && !version.is_empty() {
                 packages.push(make_dotnet_package(&name, &version));
             }
@@ -113,7 +130,10 @@ pub fn parse_packages_config(content: &str) -> Result<Vec<Package>, CatalogerErr
         if !trimmed.contains("<package") {
             continue;
         }
-        if let (Some(name), Some(version)) = (extract_attr(trimmed, "id"), extract_attr(trimmed, "version")) {
+        if let (Some(name), Some(version)) = (
+            extract_attr(trimmed, "id"),
+            extract_attr(trimmed, "version"),
+        ) {
             if !name.is_empty() && !version.is_empty() {
                 packages.push(make_dotnet_package(&name, &version));
             }
@@ -150,8 +170,8 @@ fn extract_attr(line: &str, attr: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use crate::models::{FileContents, FileEntry};
+    use std::path::PathBuf;
 
     fn text_entry(path: &str, content: &str) -> FileEntry {
         FileEntry {
@@ -186,8 +206,14 @@ mod tests {
         let content = r#"{"version":1,"dependencies":{"net8.0":{"Newtonsoft.Json":{"resolved":"13.0.3"},"Serilog":{"resolved":"3.1.1"}}}}"#;
         let pkgs = parse_packages_lock_json(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "Newtonsoft.Json" && p.version == "13.0.3"));
-        assert!(pkgs.iter().any(|p| p.name == "Serilog" && p.version == "3.1.1"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "Newtonsoft.Json" && p.version == "13.0.3")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "Serilog" && p.version == "3.1.1")
+        );
         assert!(pkgs.iter().all(|p| p.ecosystem == Ecosystem::DotNet));
     }
 
@@ -201,8 +227,14 @@ mod tests {
 </Project>"#;
         let pkgs = parse_csproj(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "Newtonsoft.Json" && p.version == "13.0.3"));
-        assert!(pkgs.iter().any(|p| p.name == "Serilog" && p.version == "3.1.1"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "Newtonsoft.Json" && p.version == "13.0.3")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "Serilog" && p.version == "3.1.1")
+        );
         assert!(pkgs.iter().all(|p| p.ecosystem == Ecosystem::DotNet));
     }
 
@@ -215,8 +247,14 @@ mod tests {
 </packages>"#;
         let pkgs = parse_packages_config(content).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "Newtonsoft.Json" && p.version == "13.0.3"));
-        assert!(pkgs.iter().any(|p| p.name == "Serilog" && p.version == "3.1.1"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "Newtonsoft.Json" && p.version == "13.0.3")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "Serilog" && p.version == "3.1.1")
+        );
         assert!(pkgs.iter().all(|p| p.ecosystem == Ecosystem::DotNet));
     }
 }

@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use crate::error::LookingGlassError;
 use crate::models::{Severity, VulnerabilityMatch};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // New report types
@@ -272,9 +272,9 @@ pub fn render_report_table(report: &ScanReport) -> String {
 
 pub fn render_report_json(report: &ScanReport) -> Result<String, crate::error::LookingGlassError> {
     serde_json::to_string_pretty(report).map_err(|e| {
-        crate::error::LookingGlassError::SbomFormat(
-            crate::error::SbomFormatError::EncodeFailed(e.to_string()),
-        )
+        crate::error::LookingGlassError::SbomFormat(crate::error::SbomFormatError::EncodeFailed(
+            e.to_string(),
+        ))
     })
 }
 
@@ -463,8 +463,7 @@ mod tests {
         // Pretty-printed JSON should contain newlines.
         assert!(json.contains('\n'));
         // Should be valid JSON.
-        let parsed: serde_json::Value =
-            serde_json::from_str(&json).expect("should be valid JSON");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("should be valid JSON");
         assert!(parsed.is_array());
         assert_eq!(parsed.as_array().unwrap().len(), 1);
     }

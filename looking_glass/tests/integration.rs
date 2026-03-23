@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-use looking_glass::cataloger::golang::GoCataloger;
 use looking_glass::cataloger::Cataloger;
+use looking_glass::cataloger::golang::GoCataloger;
 use looking_glass::db::store::{AffectedPackage, AffectedRange, VulnRecord, VulnStore};
 use looking_glass::models::*;
-use looking_glass::sbom::cyclonedx::CycloneDxFormat;
 use looking_glass::sbom::SbomFormat;
-use looking_glass::source::filesystem::FilesystemSource;
+use looking_glass::sbom::cyclonedx::CycloneDxFormat;
 use looking_glass::source::Source;
+use looking_glass::source::filesystem::FilesystemSource;
 use looking_glass::vuln::matcher;
+use std::collections::HashMap;
 
 #[test]
 fn test_full_pipeline_go_filesystem() {
@@ -31,7 +31,10 @@ fn test_full_pipeline_go_filesystem() {
     // 3. GoCataloger → discover packages.
     // -----------------------------------------------------------------------
     let cataloger = GoCataloger;
-    assert!(cataloger.can_catalog(&files), "GoCataloger should accept go.mod");
+    assert!(
+        cataloger.can_catalog(&files),
+        "GoCataloger should accept go.mod"
+    );
     let packages = cataloger.catalog(&files).expect("catalog packages");
     assert_eq!(packages.len(), 1, "should find exactly one package");
     assert_eq!(packages[0].name, "github.com/example/vuln-pkg");
@@ -85,7 +88,11 @@ fn test_full_pipeline_go_filesystem() {
         .expect("insert test vulnerability");
 
     let matches = matcher::match_packages(&store, &packages);
-    assert_eq!(matches.len(), 1, "should find exactly one vulnerability match");
+    assert_eq!(
+        matches.len(),
+        1,
+        "should find exactly one vulnerability match"
+    );
     assert_eq!(matches[0].vulnerability.id, "GO-2024-TEST-0001");
     assert_eq!(matches[0].vulnerability.severity, Severity::High);
     assert_eq!(matches[0].package.name, "github.com/example/vuln-pkg");

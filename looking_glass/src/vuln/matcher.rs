@@ -1,6 +1,30 @@
 use crate::db::store::VulnStore;
-use crate::models::{Ecosystem, Package, VulnerabilityMatch, Vulnerability};
+use crate::models::{Ecosystem, Package, Vulnerability, VulnerabilityMatch};
 use semver::Version;
+
+fn is_os_ecosystem(eco: Ecosystem) -> bool {
+    matches!(
+        eco,
+        Ecosystem::Alpine
+            | Ecosystem::Wolfi
+            | Ecosystem::Chainguard
+            | Ecosystem::Debian
+            | Ecosystem::Ubuntu
+            | Ecosystem::Distroless
+            | Ecosystem::RedHat
+            | Ecosystem::CentOS
+            | Ecosystem::Rocky
+            | Ecosystem::AlmaLinux
+            | Ecosystem::OracleLinux
+            | Ecosystem::SUSE
+            | Ecosystem::Photon
+            | Ecosystem::AzureLinux
+            | Ecosystem::CoreOS
+            | Ecosystem::Bottlerocket
+            | Ecosystem::Echo
+            | Ecosystem::MinimOS
+    )
+}
 
 /// Match a single package against the vulnerability database.
 ///
@@ -16,7 +40,13 @@ pub fn match_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityM
 
     let pkg_version = match Version::parse(version_str) {
         Ok(v) => v,
-        Err(_) => return Vec::new(),
+        Err(_) => {
+            // For OS ecosystems, fall back to string-based matching
+            if is_os_ecosystem(package.ecosystem) {
+                return match_os_package(store, package);
+            }
+            return Vec::new();
+        }
     };
 
     // Normalize package name for querying — PyPI uses lowercase names in OSV
@@ -85,6 +115,71 @@ pub fn match_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityM
 
             // Only report the first matching range per vulnerability result.
             break;
+        }
+    }
+
+    matches
+}
+
+/// Match an OS package using string-based version comparison.
+/// OS packages don't use semver, so we compare version strings directly.
+/// This is imperfect but catches most cases where OSV provides ECOSYSTEM ranges.
+fn match_os_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityMatch> {
+    // Use the versioned OSV ecosystem name if available (e.g., "Alpine:v3.18")
+    // Falls back to the base ecosystem name if not set
+    let ecosystem = package
+        .metadata
+        .get("osv_ecosystem")
+        .cloned()
+        .unwrap_or_else(|| package.ecosystem.as_osv_ecosystem().to_string());
+
+    let query_name = package.name.clone();
+    let query_results = match store.query(&ecosystem, &query_name) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut matches = Vec::new();
+
+    for result in query_results {
+        for range in &result.ranges {
+            if range.range_type != "ECOSYSTEM" {
+                continue;
+            }
+
+            // For OS packages with ECOSYSTEM ranges, check:
+            // 1. If there's a fixed version and our version string != the fixed version,
+            //    and our version is lexicographically less than fixed → vulnerable
+            // 2. If there's no fixed version → all versions after introduced are vulnerable
+            let is_after_introduced = match &range.introduced {
+                Some(intro) if intro != "0" => package.version.as_str() >= intro.as_str(),
+                _ => true,
+            };
+
+            let is_before_fixed = match &range.fixed {
+                Some(fix) => package.version.as_str() < fix.as_str(),
+                None => true,
+            };
+
+            if is_after_introduced && is_before_fixed {
+                matches.push(VulnerabilityMatch {
+                    package: package.clone(),
+                    vulnerability: crate::models::Vulnerability {
+                        id: result.id.clone(),
+                        summary: result.summary.clone(),
+                        details: result.details.clone(),
+                        severity: result.severity,
+                        published: result.published.clone(),
+                        modified: result.modified.clone(),
+                        withdrawn: None,
+                        source: result.source.clone(),
+                        cvss_score: result.cvss_score,
+                    },
+                    introduced: range.introduced.clone(),
+                    fixed: range.fixed.clone(),
+                });
+                break;
+            }
         }
     }
 
@@ -168,6 +263,46 @@ mod tests {
         let pkg = make_pkg("github.com/other/pkg", "v1.1.0");
         let results = match_package(&store, &pkg);
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_match_os_package_debian() {
+        let mut store = VulnStore::open_in_memory().expect("in-memory db");
+        store
+            .insert_vulnerabilities(&[VulnRecord {
+                id: "DSA-5678".to_string(),
+                summary: "Debian openssl vuln".to_string(),
+                details: String::new(),
+                severity: Severity::High,
+                published: "2024-01-01T00:00:00Z".to_string(),
+                modified: "2024-01-01T00:00:00Z".to_string(),
+                withdrawn: None,
+                affected: vec![AffectedPackage {
+                    ecosystem: "Debian".to_string(),
+                    package_name: "openssl".to_string(),
+                    ranges: vec![AffectedRange {
+                        range_type: "ECOSYSTEM".to_string(),
+                        introduced: Some("0".to_string()),
+                        fixed: Some("3.0.11-1~deb12u3".to_string()),
+                    }],
+                }],
+                source: "osv".to_string(),
+                cvss_score: None,
+            }])
+            .unwrap();
+
+        let pkg = Package {
+            name: "openssl".to_string(),
+            version: "3.0.11-1~deb12u2".to_string(),
+            ecosystem: Ecosystem::Debian,
+            purl: "pkg:deb/debian/openssl@3.0.11-1~deb12u2".to_string(),
+            metadata: HashMap::new(),
+            source_file: None,
+        };
+
+        let results = match_package(&store, &pkg);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].vulnerability.id, "DSA-5678");
     }
 
     #[test]

@@ -1,13 +1,13 @@
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use serde::Deserialize;
 
+use super::VulnSource;
 use crate::cpe;
 use crate::db::store::{AffectedPackage, AffectedRange, VulnRecord, VulnStore};
 use crate::error::DatabaseError;
 use crate::models::Severity;
-use super::VulnSource;
 
 // ---------------------------------------------------------------------------
 // Rate limiter
@@ -31,7 +31,11 @@ impl RateLimiter {
     fn wait_if_needed(&mut self) {
         let now = Instant::now();
         // Evict timestamps that have aged out of the window.
-        while self.timestamps.front().is_some_and(|&t| now.duration_since(t) >= self.window) {
+        while self
+            .timestamps
+            .front()
+            .is_some_and(|&t| now.duration_since(t) >= self.window)
+        {
             self.timestamps.pop_front();
         }
         // If we are at capacity, sleep until the oldest slot expires.
@@ -308,7 +312,10 @@ impl NvdClient {
 
             let mut query_params = vec![
                 ("startIndex".to_string(), start_index.to_string()),
-                ("resultsPerPage".to_string(), self.results_per_page().to_string()),
+                (
+                    "resultsPerPage".to_string(),
+                    self.results_per_page().to_string(),
+                ),
             ];
 
             if let Some(start_date) = last_mod_start {
@@ -317,10 +324,7 @@ impl NvdClient {
                 query_params.push(("lastModEndDate".to_string(), now_iso8601()));
             }
 
-            let mut request = self
-                .http
-                .get(NVD_API_BASE)
-                .query(&query_params);
+            let mut request = self.http.get(NVD_API_BASE).query(&query_params);
 
             if let Some(key) = &self.api_key {
                 request = request.header("apiKey", key);
@@ -391,7 +395,11 @@ impl VulnSource for NvdSource {
         "nvd"
     }
 
-    fn import(&self, store: &mut VulnStore, ecosystem: Option<&str>) -> Result<usize, DatabaseError> {
+    fn import(
+        &self,
+        store: &mut VulnStore,
+        ecosystem: Option<&str>,
+    ) -> Result<usize, DatabaseError> {
         let mut client = NvdClient::new();
         let mut total_imported = 0;
         let mut total_cves = 0;
@@ -403,6 +411,8 @@ impl VulnSource for NvdSource {
             eprintln!("nvd: incremental update since {}", ts);
         } else {
             eprintln!("nvd: full import (no previous update found)");
+            // Clear existing NVD data for clean full import
+            store.clear_source("nvd")?;
         }
 
         loop {
@@ -501,7 +511,10 @@ mod tests {
             last_modified: String::new(),
             metrics: NvdMetrics {
                 cvss_metric_v31: vec![NvdCvssV3 {
-                    cvss_data: NvdCvssV3Data { base_severity: "CRITICAL".to_string(), base_score: Some(9.8) },
+                    cvss_data: NvdCvssV3Data {
+                        base_severity: "CRITICAL".to_string(),
+                        base_score: Some(9.8),
+                    },
                 }],
                 cvss_metric_v30: vec![],
                 cvss_metric_v2: vec![],
@@ -522,8 +535,9 @@ mod tests {
             metrics: NvdMetrics {
                 cvss_metric_v31: vec![],
                 cvss_metric_v30: vec![],
-                cvss_metric_v2: vec![NvdCvssV2 { base_severity: "HIGH".to_string() }],
-
+                cvss_metric_v2: vec![NvdCvssV2 {
+                    base_severity: "HIGH".to_string(),
+                }],
             },
             configurations: vec![],
         };
@@ -558,7 +572,10 @@ mod tests {
             last_modified: "2022-04-01T00:00:00Z".to_string(),
             metrics: NvdMetrics {
                 cvss_metric_v31: vec![NvdCvssV3 {
-                    cvss_data: NvdCvssV3Data { base_severity: "CRITICAL".to_string(), base_score: Some(9.8) },
+                    cvss_data: NvdCvssV3Data {
+                        base_severity: "CRITICAL".to_string(),
+                        base_score: Some(9.8),
+                    },
                 }],
                 ..Default::default()
             },
