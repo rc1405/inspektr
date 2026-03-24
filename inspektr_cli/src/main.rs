@@ -329,12 +329,8 @@ fn cmd_db_push(registry: &str, db: Option<&std::path::Path>) -> Result<()> {
 
     eprintln!("Pushing database to {}...", registry);
 
-    push_artifact(
-        registry,
-        &db_path,
-        "application/vnd.inspektr.db.v1+sqlite",
-    )
-    .with_context(|| format!("Failed to push database to '{}'", registry))?;
+    push_artifact(registry, &db_path, "application/vnd.inspektr.db.v1+sqlite")
+        .with_context(|| format!("Failed to push database to '{}'", registry))?;
 
     eprintln!("Done.");
     Ok(())
