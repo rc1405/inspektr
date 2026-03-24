@@ -981,6 +981,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "inspektr"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "flate2",
+ "goblin",
+ "oci-distribution",
+ "reqwest",
+ "rusqlite",
+ "semver",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml",
+ "uuid",
+ "zip",
+]
+
+[[package]]
+name = "inspektr_cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "inspektr",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1101,37 +1132,6 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
-
-[[package]]
-name = "looking_glass"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "flate2",
- "goblin",
- "oci-distribution",
- "reqwest",
- "rusqlite",
- "semver",
- "serde",
- "serde_json",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml",
- "uuid",
- "zip",
-]
-
-[[package]]
-name = "looking_glass_cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "looking_glass",
-]
 
 [[package]]
 name = "lzma-rs"

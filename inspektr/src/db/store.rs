@@ -229,7 +229,7 @@ impl VulnStore {
 
         let Some(last) = newest_update else {
             eprintln!(
-                "WARNING: Vulnerability database has never been updated. Run `looking-glass db update` or `looking-glass db build`."
+                "WARNING: Vulnerability database has never been updated. Run `inspektr db update` or `inspektr db build`."
             );
             return;
         };
@@ -238,12 +238,12 @@ impl VulnStore {
 
         if age_days > 30 {
             eprintln!(
-                "ERROR: Vulnerability database is {} days old. Results may be inaccurate. Run `looking-glass db update` or `looking-glass db build`.",
+                "ERROR: Vulnerability database is {} days old. Results may be inaccurate. Run `inspektr db update` or `inspektr db build`.",
                 age_days
             );
         } else if age_days > 7 {
             eprintln!(
-                "WARNING: Vulnerability database is {} days old. Consider running `looking-glass db update` or `looking-glass db build`.",
+                "WARNING: Vulnerability database is {} days old. Consider running `inspektr db update` or `inspektr db build`.",
                 age_days
             );
         }

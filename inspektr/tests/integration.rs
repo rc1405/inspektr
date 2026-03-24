@@ -1,12 +1,12 @@
-use looking_glass::cataloger::Cataloger;
-use looking_glass::cataloger::golang::GoCataloger;
-use looking_glass::db::store::{AffectedPackage, AffectedRange, VulnRecord, VulnStore};
-use looking_glass::models::*;
-use looking_glass::sbom::SbomFormat;
-use looking_glass::sbom::cyclonedx::CycloneDxFormat;
-use looking_glass::source::Source;
-use looking_glass::source::filesystem::FilesystemSource;
-use looking_glass::vuln::matcher;
+use inspektr::cataloger::Cataloger;
+use inspektr::cataloger::golang::GoCataloger;
+use inspektr::db::store::{AffectedPackage, AffectedRange, VulnRecord, VulnStore};
+use inspektr::models::*;
+use inspektr::sbom::SbomFormat;
+use inspektr::sbom::cyclonedx::CycloneDxFormat;
+use inspektr::source::Source;
+use inspektr::source::filesystem::FilesystemSource;
+use inspektr::vuln::matcher;
 use std::collections::HashMap;
 
 #[test]

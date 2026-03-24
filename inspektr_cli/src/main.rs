@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use looking_glass::models::Severity;
-use looking_glass::pipeline;
-use looking_glass::vuln::report;
+use inspektr::models::Severity;
+use inspektr::pipeline;
+use inspektr::vuln::report;
 use std::path::PathBuf;
 
 // ---------------------------------------------------------------------------
@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "looking-glass",
+    name = "inspektr",
     version,
     about = "A software composition analysis tool",
     long_about = None,
@@ -76,8 +76,8 @@ enum Commands {
 enum DbCommands {
     /// Pull the latest pre-built vulnerability database from Docker Hub.
     Update {
-        /// OCI image reference for the database (default: rc1405/looking-glass-db:latest)
-        #[arg(long, default_value = "rc1405/looking-glass-db:latest")]
+        /// OCI image reference for the database (default: rc1405/inspektr-db:latest)
+        #[arg(long, default_value = "rc1405/inspektr-db:latest")]
         registry: String,
     },
 
@@ -246,7 +246,7 @@ fn cmd_db_update(registry: &str) -> Result<()> {
 
     eprintln!("Pulling vulnerability database from {} …", registry);
 
-    looking_glass::oci::pull::pull_artifact(registry, &db_path)
+    inspektr::oci::pull::pull_artifact(registry, &db_path)
         .with_context(|| format!("Failed to pull database from '{}'", registry))?;
 
     eprintln!("Database updated at {}", db_path.display());
@@ -269,8 +269,8 @@ fn cmd_db_clean() -> Result<()> {
 
 #[cfg(feature = "db-admin")]
 fn cmd_db_build(ecosystem: Option<&str>, output: Option<&std::path::Path>) -> Result<()> {
-    use looking_glass::db::store::VulnStore;
-    use looking_glass::db::{normalize_ecosystem, vuln_sources};
+    use inspektr::db::store::VulnStore;
+    use inspektr::db::{normalize_ecosystem, vuln_sources};
 
     let db_path = output
         .map(|p| p.to_path_buf())
@@ -314,7 +314,7 @@ fn cmd_db_build(ecosystem: Option<&str>, output: Option<&std::path::Path>) -> Re
 
 #[cfg(feature = "db-admin")]
 fn cmd_db_push(registry: &str, db: Option<&std::path::Path>) -> Result<()> {
-    use looking_glass::oci::push::push_artifact;
+    use inspektr::oci::push::push_artifact;
 
     let db_path = db
         .map(|p| p.to_path_buf())
@@ -322,7 +322,7 @@ fn cmd_db_push(registry: &str, db: Option<&std::path::Path>) -> Result<()> {
 
     if !db_path.exists() {
         anyhow::bail!(
-            "Database not found at {}. Run `looking-glass db build` first.",
+            "Database not found at {}. Run `inspektr db build` first.",
             db_path.display()
         );
     }
@@ -332,7 +332,7 @@ fn cmd_db_push(registry: &str, db: Option<&std::path::Path>) -> Result<()> {
     push_artifact(
         registry,
         &db_path,
-        "application/vnd.looking-glass.db.v1+sqlite",
+        "application/vnd.inspektr.db.v1+sqlite",
     )
     .with_context(|| format!("Failed to push database to '{}'", registry))?;
 

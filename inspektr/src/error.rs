@@ -50,7 +50,7 @@ pub enum SbomFormatError {
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
-    #[error("Database not found at {path}. Run `looking-glass db update` to download it.")]
+    #[error("Database not found at {path}. Run `inspektr db update` to download it.")]
     NotFound { path: String },
 
     #[error("Database query failed: {0}")]
@@ -72,7 +72,7 @@ pub enum OciError {
     PushFailed { reference: String, reason: String },
 
     #[error(
-        "Authentication failed for {registry}. Set LOOKING_GLASS_REGISTRY_TOKEN or run `docker login`."
+        "Authentication failed for {registry}. Set INSPEKTR_REGISTRY_TOKEN or run `docker login`."
     )]
     AuthFailed { registry: String },
 

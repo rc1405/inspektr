@@ -116,12 +116,12 @@ impl ImageReference {
 /// Resolve authentication for a registry.
 ///
 /// Checks (in order):
-/// 1. LOOKING_GLASS_REGISTRY_TOKEN env var (as bearer token, username "token")
+/// 1. INSPEKTR_REGISTRY_TOKEN env var (as bearer token, username "token")
 /// 2. Docker config.json (~/.docker/config.json)
 /// 3. Anonymous
 pub fn resolve_auth(registry: &str) -> RegistryAuth {
     // 1. Check env var
-    if let Ok(token) = std::env::var("LOOKING_GLASS_REGISTRY_TOKEN") {
+    if let Ok(token) = std::env::var("INSPEKTR_REGISTRY_TOKEN") {
         if !token.is_empty() {
             return RegistryAuth::Basic("token".to_string(), token);
         }

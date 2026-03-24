@@ -182,7 +182,7 @@ fn select_format(format: &str) -> Result<Box<dyn SbomFormat>, LookingGlassError>
 /// Return the default path for the vulnerability database.
 ///
 /// Uses `XDG_DATA_HOME` if set, otherwise `~/.local/share`, and appends
-/// `looking-glass/vuln.db`.
+/// `inspektr/vuln.db`.
 pub fn default_db_path() -> std::path::PathBuf {
     let base = if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
         std::path::PathBuf::from(xdg)
@@ -190,7 +190,7 @@ pub fn default_db_path() -> std::path::PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         std::path::PathBuf::from(home).join(".local").join("share")
     };
-    base.join("looking-glass").join("vuln.db")
+    base.join("inspektr").join("vuln.db")
 }
 
 #[cfg(test)]

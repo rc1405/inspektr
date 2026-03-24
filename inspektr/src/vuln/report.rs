@@ -132,7 +132,7 @@ pub fn build_scan_report(
 
     ScanReport {
         metadata: ScanMetadata {
-            tool: "looking-glass".to_string(),
+            tool: "inspektr".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             timestamp,
             target: target.to_string(),
@@ -569,7 +569,7 @@ mod tests {
         let report = build_scan_report("target", "filesystem", 5, &matches);
         let json = render_report_json(&report).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["metadata"]["tool"], "looking-glass");
+        assert_eq!(parsed["metadata"]["tool"], "inspektr");
         assert_eq!(parsed["metadata"]["total_packages"], 5);
         assert!(parsed["vulnerabilities"].is_array());
     }

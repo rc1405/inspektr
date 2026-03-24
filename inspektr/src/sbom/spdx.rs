@@ -87,11 +87,11 @@ impl SbomFormat for SpdxFormat {
             spdx_version: "SPDX-2.3".to_string(),
             data_license: "CC0-1.0".to_string(),
             spdx_id: "SPDXRef-DOCUMENT".to_string(),
-            name: "looking-glass-sbom".to_string(),
-            document_namespace: format!("https://looking-glass.dev/spdxdocs/{}", Uuid::new_v4()),
+            name: "inspektr-sbom".to_string(),
+            document_namespace: format!("https://inspektr.dev/spdxdocs/{}", Uuid::new_v4()),
             creation_info: SpdxCreationInfo {
                 created: now,
-                creators: vec!["Tool: looking-glass".to_string()],
+                creators: vec!["Tool: inspektr".to_string()],
                 license_list_version: Some("3.19".to_string()),
             },
             packages,
@@ -276,14 +276,14 @@ mod tests {
             doc["documentNamespace"]
                 .as_str()
                 .unwrap()
-                .starts_with("https://looking-glass.dev/spdxdocs/")
+                .starts_with("https://inspektr.dev/spdxdocs/")
         );
 
         let creators = doc["creationInfo"]["creators"].as_array().unwrap();
         assert!(
             creators
                 .iter()
-                .any(|c| c.as_str().unwrap().contains("looking-glass"))
+                .any(|c| c.as_str().unwrap().contains("inspektr"))
         );
 
         let packages = doc["packages"].as_array().unwrap();

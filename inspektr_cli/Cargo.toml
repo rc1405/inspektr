@@ -1,13 +1,13 @@
 [package]
-name = "looking_glass_cli"
+name = "inspektr_cli"
 version = "0.1.0"
 edition = "2024"
 
 [features]
 default = []
-db-admin = ["looking_glass/db-admin"]
+db-admin = ["inspektr/db-admin"]
 
 [dependencies]
-looking_glass = { path = "../looking_glass" }
+inspektr = { path = "../inspektr" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

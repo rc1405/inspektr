@@ -41,7 +41,7 @@ pub fn parse_rpmdb_sqlite(
     distro: &DistroInfo,
 ) -> Result<Vec<Package>, CatalogerError> {
     // Write to a temp file so rusqlite can open it by path
-    let tmp_path = std::env::temp_dir().join(format!("looking_glass_rpmdb_{}.sqlite", uuid_hex()));
+    let tmp_path = std::env::temp_dir().join(format!("inspektr_rpmdb_{}.sqlite", uuid_hex()));
 
     {
         let mut f = std::fs::File::create(&tmp_path).map_err(|e| CatalogerError::ParseFailed {
