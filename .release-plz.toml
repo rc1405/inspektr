@@ -1,0 +1,10 @@
+[workspace]
+semver_check = false
+
+[[package]]
+name = "inspektr"
+version_group = "inspektr"
+
+[[package]]
+name = "inspektr_cli"
+version_group = "inspektr"

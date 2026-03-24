@@ -1,0 +1,47 @@
+site_name: Inspektr
+site_url: https://rc1405.github.io/inspektr
+repo_url: https://github.com/rc1405/inspektr
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Usage:
+    - CLI Reference: usage/cli-reference.md
+    - SBOM Generation: usage/sbom.md
+    - Vulnerability Scanning: usage/vulnerability-scanning.md
+    - Database Management: usage/database.md
+    - Container Images: usage/container-images.md
+    - CI/CD Integration: usage/ci-cd.md
+  - Supported Ecosystems:
+    - Language Ecosystems: ecosystems/languages.md
+    - OS Distributions: ecosystems/os.md
+  - Development:
+    - Architecture: development/architecture.md
+    - Adding Ecosystems: development/adding-ecosystems.md
+    - Database Schema: development/database-schema.md
+  - Library Usage: library.md
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    scheme: slate
+    primary: indigo
+extra:
+  version:
+    provider: mike
+
+plugins:
+  - search
+  - mike:
+      version_selector: true
+
+markdown_extensions:
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - tables
