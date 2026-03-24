@@ -1,0 +1,56 @@
+name: Build and Push Vulnerability Database
+
+on:
+  schedule:
+    # Run daily at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: rc1405/inspektr-db
+
+jobs:
+  build-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action/setup@v1
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-db-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-db-
+
+      - name: Build inspektr with db-admin
+        run: cargo build --release --features db-admin
+
+      - name: Build vulnerability database
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          ./target/release/inspektr_cli db build -o vuln.db
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push database to registry
+        run: |
+          DATE_TAG=$(date +%Y%m%d)
+          ./target/release/inspektr_cli db push --db vuln.db ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${DATE_TAG}
+          ./target/release/inspektr_cli db push --db vuln.db ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          echo "Pushed ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${DATE_TAG} and :latest"

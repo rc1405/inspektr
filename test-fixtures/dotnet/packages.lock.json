@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "dependencies": {
+        "net8.0": {
+            "Newtonsoft.Json": { "resolved": "13.0.3" }
+        }
+    }
+}

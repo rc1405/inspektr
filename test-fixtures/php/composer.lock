@@ -1,0 +1,6 @@
+{
+    "packages": [
+        { "name": "monolog/monolog", "version": "3.5.0" }
+    ],
+    "packages-dev": []
+}

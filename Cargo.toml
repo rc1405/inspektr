@@ -1,0 +1,3 @@
+[workspace]
+members = ["inspektr", "inspektr_cli"]
+resolver = "3"

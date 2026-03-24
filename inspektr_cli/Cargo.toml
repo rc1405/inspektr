@@ -1,0 +1,13 @@
+[package]
+name = "inspektr_cli"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+db-admin = ["inspektr/db-admin"]
+
+[dependencies]
+inspektr = { path = "../inspektr" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
