@@ -12,7 +12,7 @@ pub struct PhotonCveEntry {
     pub cve_id: String,
     pub pkg: String,
     #[serde(default)]
-    pub cve_score: String,
+    pub cve_score: serde_json::Value, // Can be float or string
     #[serde(default)]
     pub aff_ver: String,
     #[serde(default)]
@@ -55,7 +55,11 @@ pub fn parse_photon_json(json: &str, version: &str) -> Result<Vec<VulnRecord>, D
             continue;
         }
 
-        let cvss_score: Option<f64> = entry.cve_score.parse().ok();
+        let cvss_score: Option<f64> = match &entry.cve_score {
+            serde_json::Value::Number(n) => n.as_f64(),
+            serde_json::Value::String(s) => s.parse().ok(),
+            _ => None,
+        };
         let severity = cvss_score.map(score_to_severity).unwrap_or(Severity::None);
 
         let fixed = if entry.res_ver.is_empty() {
@@ -166,10 +170,11 @@ mod tests {
 
     #[test]
     fn test_parse_photon_cve_entry() {
+        // cve_score as a float number (actual Photon JSON format)
         let json = r#"[{
             "cve_id": "CVE-2024-1234",
             "pkg": "openssl",
-            "cve_score": "7.5",
+            "cve_score": 7.5,
             "aff_ver": "3.0",
             "res_ver": "3.0.12-1.ph4",
             "status": "Fixed"
@@ -189,8 +194,25 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_photon_cve_entry_score_as_string() {
+        // cve_score as a quoted string (older Photon data format)
+        let json = r#"[{
+            "cve_id": "CVE-2024-9999",
+            "pkg": "curl",
+            "cve_score": "9.1",
+            "aff_ver": "3.0",
+            "res_ver": "8.0.0-1.ph4",
+            "status": "Fixed"
+        }]"#;
+        let records = parse_photon_json(json, "4.0").unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].cvss_score, Some(9.1));
+        assert_eq!(records[0].severity, Severity::Critical);
+    }
+
+    #[test]
     fn test_skips_not_affected() {
-        let json = r#"[{"cve_id":"CVE-2024-5678","pkg":"curl","cve_score":"5.0","aff_ver":"3.0","res_ver":"","status":"Not Affected"}]"#;
+        let json = r#"[{"cve_id":"CVE-2024-5678","pkg":"curl","cve_score":5.0,"aff_ver":"3.0","res_ver":"","status":"Not Affected"}]"#;
         let records = parse_photon_json(json, "4.0").unwrap();
         assert!(records.is_empty());
     }
