@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/rc1405/inspektr/compare/inspektr-v0.1.1...inspektr-v0.1.2) - 2026-03-25
+
+### Fixed
+
+- performance, security improvements
+
+### Other
+
+- fmt
+
 ## [0.1.1](https://github.com/rc1405/inspektr/compare/inspektr-v0.1.0...inspektr-v0.1.1) - 2026-03-25
 
 ### Added
