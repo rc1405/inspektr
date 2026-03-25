@@ -4,15 +4,31 @@ use crate::models::Severity;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
-/// Parse a criterion comment like "openssl is earlier than 1:3.0.7-25.el9"
-/// into (package_name, version).
+/// Parse a criterion comment into (package_name, version).
+///
+/// Handles two formats:
+/// - Oracle: `"openssl is earlier than 1:3.0.7-25.el9"`
+/// - Azure Linux: `"Package libarchive is earlier than 3.7.7-5, affected by CVE-2026-4111"`
 pub fn parse_criterion_comment(comment: &str) -> Option<(String, String)> {
+    // Strip "Package " prefix if present (Azure Linux format)
+    let comment = comment.strip_prefix("Package ").unwrap_or(comment);
+
+    // Split on " is earlier than "
     let parts: Vec<&str> = comment.splitn(2, " is earlier than ").collect();
-    if parts.len() == 2 {
-        Some((parts[0].trim().to_string(), parts[1].trim().to_string()))
-    } else {
-        None
+    if parts.len() != 2 {
+        return None;
     }
+
+    let name = parts[0].trim().to_string();
+    // Strip ", affected by CVE-..." suffix if present (Azure Linux format)
+    let version = parts[1]
+        .split(',')
+        .next()
+        .unwrap_or(parts[1])
+        .trim()
+        .to_string();
+
+    Some((name, version))
 }
 
 /// Helper: extract an attribute value from an event by key name.
@@ -102,7 +118,7 @@ pub fn parse_oval_xml(
                 match name.as_ref() {
                     b"definition" => {
                         let class = get_attr(e, b"class").unwrap_or_default();
-                        if class == "patch" {
+                        if class == "patch" || class == "vulnerability" {
                             in_definition = true;
                             cve_ids.clear();
                             title.clear();
@@ -120,7 +136,9 @@ pub fn parse_oval_xml(
                     b"advisory" if in_metadata => {
                         in_advisory = true;
                     }
-                    b"severity" if in_advisory => {
+                    // Severity may live inside <advisory> (Oracle) or directly
+                    // under <metadata> (Azure Linux).
+                    b"severity" if in_advisory || in_metadata => {
                         in_severity = true;
                     }
                     _ => {
@@ -283,6 +301,46 @@ mod tests {
         assert_eq!(ver, "1:3.0.7-25.el9");
 
         assert!(parse_criterion_comment("no match here").is_none());
+    }
+
+    #[test]
+    fn test_parse_criterion_comment_azure_linux() {
+        let (name, ver) = parse_criterion_comment(
+            "Package libarchive is earlier than 3.7.7-5, affected by CVE-2026-4111",
+        )
+        .unwrap();
+        assert_eq!(name, "libarchive");
+        assert_eq!(ver, "3.7.7-5");
+    }
+
+    #[test]
+    fn test_parse_oval_azure_linux() {
+        let xml = r#"<?xml version="1.0"?>
+<oval_definitions xmlns="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+  <definitions>
+    <definition id="oval:com.microsoft.azurelinux:def:20264111" class="vulnerability">
+      <metadata>
+        <title>CVE-2026-4111 affecting package libarchive for Azure Linux 3.0</title>
+        <reference source="CVE" ref_id="CVE-2026-4111" ref_url="https://nvd.nist.gov/vuln/detail/CVE-2026-4111"/>
+        <severity>High</severity>
+      </metadata>
+      <criteria operator="AND">
+        <criterion test_ref="oval:tst:1" comment="Package libarchive is earlier than 3.7.7-5, affected by CVE-2026-4111"/>
+      </criteria>
+    </definition>
+  </definitions>
+</oval_definitions>"#;
+        let records = parse_oval_xml(xml, "Azure Linux", "3.0").unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].id, "CVE-2026-4111");
+        assert_eq!(records[0].severity, Severity::High);
+        assert_eq!(records[0].affected[0].ecosystem, "Azure Linux:3.0");
+        assert_eq!(records[0].affected[0].package_name, "libarchive");
+        assert_eq!(
+            records[0].affected[0].ranges[0].fixed,
+            Some("3.7.7-5".to_string())
+        );
+        assert_eq!(records[0].source, "azurelinux");
     }
 
     #[test]

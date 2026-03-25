@@ -59,11 +59,21 @@ impl RateLimiter {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NvdResponse {
+    #[serde(default)]
     pub results_per_page: u32,
+    #[serde(default)]
     pub start_index: u32,
+    #[serde(default)]
     pub total_results: u32,
     #[serde(default)]
     pub vulnerabilities: Vec<NvdVulnerability>,
+    // Additional fields the API returns — we don't use these but need to accept them
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub timestamp: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -350,8 +360,21 @@ impl NvdClient {
                 )));
             }
 
-            return response.json::<NvdResponse>().map_err(|e| {
-                DatabaseError::ImportFailed(format!("Failed to parse NVD response: {}", e))
+            let text = response.text().map_err(|e| {
+                DatabaseError::ImportFailed(format!("Failed to read NVD response body: {}", e))
+            })?;
+
+            return serde_json::from_str::<NvdResponse>(&text).map_err(|e| {
+                // Include first 200 chars of response for debugging
+                let preview = if text.len() > 200 {
+                    &text[..200]
+                } else {
+                    &text
+                };
+                DatabaseError::ImportFailed(format!(
+                    "Failed to parse NVD response: {}. Response preview: {}",
+                    e, preview
+                ))
             });
         }
 
