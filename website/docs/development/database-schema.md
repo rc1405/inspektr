@@ -61,6 +61,10 @@ Used for:
 - `schema_version` — current schema version (auto-migration on mismatch)
 - `last_updated_osv` — last OSV import timestamp
 - `last_updated_nvd` — last NVD import timestamp
+- `last_updated_photon` — last Photon OS import timestamp
+- `last_updated_oracle` — last Oracle Linux import timestamp
+- `last_updated_azurelinux` — last Azure Linux import timestamp
+- `last_updated_bottlerocket` — last Bottlerocket import timestamp
 
 ## Schema Versioning
 
@@ -74,9 +78,11 @@ To make schema changes:
 
 ## Multi-Source Support
 
-The composite primary key `(id, source)` allows the same vulnerability (e.g., `CVE-2021-44906`) to have separate entries from OSV and NVD. Each source can provide different severity ratings and CVSS scores.
+The composite primary key `(id, source)` allows the same vulnerability (e.g., `CVE-2021-44906`) to have separate entries from different sources. Each source can provide different severity ratings and CVSS scores.
 
-The `clear_source()` method deletes all data for a specific source, enabling clean re-imports without affecting data from other sources.
+Sources: `osv`, `nvd`, `photon`, `oracle`, `azurelinux`, `bottlerocket`.
+
+The `clear_source()` method deletes all data for a specific source, enabling clean re-imports without affecting data from other sources. CentOS data is handled as a special case — RHEL entries are duplicated with CentOS ecosystem names after OSV import.
 
 ## Versioned Ecosystem Names
 

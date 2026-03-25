@@ -28,7 +28,7 @@ cargo build --release --features db-admin
 
 ### Full build
 
-Downloads from both OSV and NVD:
+Downloads from all vulnerability sources (OSV, NVD, Oracle OVAL, Photon OS, Azure Linux, Bottlerocket):
 
 ```bash
 inspektr db build
@@ -39,6 +39,8 @@ inspektr db build
 ```bash
 inspektr db build --ecosystem npm
 inspektr db build --ecosystem Alpine
+inspektr db build --ecosystem Oracle
+inspektr db build --ecosystem "Photon OS"
 ```
 
 ### NVD API key
@@ -64,6 +66,22 @@ NVD_API_KEY=your-key inspektr db build
 ```
 
 OSV is always a full re-import (fast — bulk zip downloads).
+
+## Vulnerability Data Sources
+
+`db build` imports from multiple sources automatically:
+
+| Source | Type | Coverage |
+|--------|------|----------|
+| **OSV** | Bulk ZIP download | Alpine, Wolfi, Chainguard, Debian, Ubuntu, Red Hat, Rocky, AlmaLinux, SUSE, Echo, MinimOS + all language ecosystems |
+| **NVD** | CVE API 2.0 (paginated) | All ecosystems via CPE mapping. Provides CVSS scores. |
+| **Oracle OVAL** | OVAL XML (bzip2) | Oracle Linux 7, 8, 9 |
+| **Photon OS** | JSON CVE metadata | Photon OS 1.0–5.0 |
+| **Azure Linux** | OVAL XML | CBL-Mariner 1.0/2.0, Azure Linux 3.0 |
+| **Bottlerocket** | updateinfo.xml (gzip) | Bottlerocket |
+| **CentOS** | RHEL proxy | CentOS (duplicates Red Hat vulnerability data) |
+
+CoreOS is supported for SBOM generation but has no distro-specific vulnerability feed — NVD provides partial coverage via CPE matching.
 
 ## Push to Registry
 

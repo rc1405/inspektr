@@ -8,7 +8,7 @@ readme = "../README.md"
 
 [features]
 default = []
-db-admin = ["dep:zip"]
+db-admin = ["dep:zip", "dep:quick-xml", "dep:bzip2"]
 
 [dependencies]
 goblin = "0.9"
@@ -19,6 +19,8 @@ semver = { version = "1", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 zip = { version = "2", optional = true }
+quick-xml = { version = "0.37", features = ["serialize"], optional = true }
+bzip2 = { version = "0.5", optional = true }
 reqwest = { version = "0.12", features = ["blocking"] }
 oci-distribution = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread"] }

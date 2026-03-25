@@ -217,6 +217,48 @@ pub fn import_osv_ecosystem(
 }
 
 // ---------------------------------------------------------------------------
+// CentOS proxy (duplicates RHEL data for CentOS)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "db-admin")]
+/// Duplicate RHEL affected_packages entries as CentOS entries.
+/// CentOS packages mirror RHEL, so RHEL vulnerability data applies to CentOS.
+pub fn duplicate_rhel_for_centos(store: &mut VulnStore) -> Result<usize, crate::error::DatabaseError> {
+    eprintln!("osv: duplicating Red Hat data for CentOS...");
+
+    // For each RHEL affected_package, create a CentOS entry with the ecosystem
+    // name changed from "Red Hat:X" to "CentOS:X"
+    // Skip if CentOS entries already exist for this vuln
+    let count = store.execute_sql(
+        "INSERT OR IGNORE INTO affected_packages (vuln_id, vuln_source, ecosystem, package_name)
+         SELECT vuln_id, vuln_source,
+                REPLACE(ecosystem, 'Red Hat', 'CentOS'),
+                package_name
+         FROM affected_packages
+         WHERE ecosystem LIKE 'Red Hat:%'"
+    )?;
+
+    // Also duplicate the affected_ranges for the new affected_packages
+    store.execute_sql(
+        "INSERT OR IGNORE INTO affected_ranges (affected_id, range_type, introduced, fixed)
+         SELECT new_ap.id, ar.range_type, ar.introduced, ar.fixed
+         FROM affected_packages new_ap
+         JOIN affected_packages old_ap ON old_ap.vuln_id = new_ap.vuln_id
+             AND old_ap.vuln_source = new_ap.vuln_source
+             AND old_ap.package_name = new_ap.package_name
+             AND old_ap.ecosystem LIKE 'Red Hat:%'
+         JOIN affected_ranges ar ON ar.affected_id = old_ap.id
+         WHERE new_ap.ecosystem LIKE 'CentOS:%'
+             AND NOT EXISTS (
+                 SELECT 1 FROM affected_ranges WHERE affected_id = new_ap.id
+             )"
+    )?;
+
+    eprintln!("osv: duplicated {} CentOS entries from Red Hat data", count);
+    Ok(count)
+}
+
+// ---------------------------------------------------------------------------
 // VulnSource implementation
 // ---------------------------------------------------------------------------
 
@@ -259,6 +301,14 @@ impl VulnSource for OsvSource {
                 total
             }
         };
+
+        // Duplicate RHEL data for CentOS
+        if ecosystem.is_none() || ecosystem == Some("CentOS") {
+            match duplicate_rhel_for_centos(store) {
+                Ok(_) => {}
+                Err(e) => eprintln!("osv: CentOS duplication warning: {}", e),
+            }
+        }
 
         // Record the update timestamp
         store.set_last_updated("osv", &crate::sbom::spdx::chrono_now())?;
@@ -392,5 +442,42 @@ mod tests {
     fn test_osv_source_name() {
         let source = OsvSource;
         assert_eq!(source.name(), "osv");
+    }
+
+    #[cfg(feature = "db-admin")]
+    #[test]
+    fn test_centos_proxy_from_rhel() {
+        use crate::db::store::{VulnStore, VulnRecord, AffectedPackage, AffectedRange};
+        use crate::models::Severity;
+
+        let mut store = VulnStore::open_in_memory().unwrap();
+        store.insert_vulnerabilities(&[VulnRecord {
+            id: "RHSA-2024-001".to_string(),
+            summary: "RHEL openssl vuln".to_string(),
+            details: String::new(),
+            severity: Severity::High,
+            published: "2024-01-01T00:00:00Z".to_string(),
+            modified: "2024-01-01T00:00:00Z".to_string(),
+            withdrawn: None,
+            affected: vec![AffectedPackage {
+                ecosystem: "Red Hat:9".to_string(),
+                package_name: "openssl".to_string(),
+                ranges: vec![AffectedRange {
+                    range_type: "ECOSYSTEM".to_string(),
+                    introduced: Some("0".to_string()),
+                    fixed: Some("1:3.0.7-25.el9_3".to_string()),
+                }],
+            }],
+            source: "osv".to_string(),
+            cvss_score: None,
+        }]).unwrap();
+
+        duplicate_rhel_for_centos(&mut store).unwrap();
+
+        // Verify CentOS entry was created
+        let results = store.query("CentOS:9", "openssl").unwrap();
+        assert!(!results.is_empty(), "Should find CentOS entry");
+        assert_eq!(results[0].id, "RHSA-2024-001");
+        assert_eq!(results[0].ranges[0].fixed, Some("1:3.0.7-25.el9_3".to_string()));
     }
 }
