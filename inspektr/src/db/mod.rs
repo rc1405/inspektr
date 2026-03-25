@@ -68,7 +68,6 @@ pub const ALL_ECOSYSTEMS: &[&str] = &[
 /// These are handled by distro-native importers, not OSV.
 #[cfg(feature = "db-admin")]
 const DISTRO_ECOSYSTEMS: &[&str] = &[
-    "CentOS",
     "Oracle",
     "Photon OS",
     "Azure Linux",
@@ -112,7 +111,6 @@ mod tests {
         assert_eq!(normalize_ecosystem("maven"), Some("Maven"));
         assert_eq!(normalize_ecosystem("unknown"), None);
         // Distro-native ecosystems
-        assert_eq!(normalize_ecosystem("centos"), Some("CentOS"));
         assert_eq!(normalize_ecosystem("oracle"), Some("Oracle"));
         assert_eq!(normalize_ecosystem("photon os"), Some("Photon OS"));
         assert_eq!(normalize_ecosystem("azure linux"), Some("Azure Linux"));

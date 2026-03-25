@@ -153,26 +153,16 @@ pub struct NvdCpeMatch {
 // Severity extraction helpers
 // ---------------------------------------------------------------------------
 
-fn parse_nvd_severity(s: &str) -> Severity {
-    match s.to_uppercase().as_str() {
-        "CRITICAL" => Severity::Critical,
-        "HIGH" => Severity::High,
-        "MEDIUM" => Severity::Medium,
-        "LOW" => Severity::Low,
-        _ => Severity::None,
-    }
-}
-
 fn extract_severity(cve: &NvdCve) -> Severity {
     // Prefer V3.1, fall back to V3.0, then V2.
     if let Some(m) = cve.metrics.cvss_metric_v31.first() {
-        return parse_nvd_severity(&m.cvss_data.base_severity);
+        return Severity::parse(&m.cvss_data.base_severity);
     }
     if let Some(m) = cve.metrics.cvss_metric_v30.first() {
-        return parse_nvd_severity(&m.cvss_data.base_severity);
+        return Severity::parse(&m.cvss_data.base_severity);
     }
     if let Some(m) = cve.metrics.cvss_metric_v2.first() {
-        return parse_nvd_severity(&m.base_severity);
+        return Severity::parse(&m.base_severity);
     }
     Severity::None
 }

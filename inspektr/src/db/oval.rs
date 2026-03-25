@@ -4,16 +4,6 @@ use crate::models::Severity;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
-/// Map OVAL severity strings to our Severity enum.
-pub fn map_oval_severity(s: &str) -> Severity {
-    match s.to_lowercase().as_str() {
-        "critical" => Severity::Critical,
-        "important" | "high" => Severity::High,
-        "moderate" | "medium" => Severity::Medium,
-        "low" => Severity::Low,
-        _ => Severity::None,
-    }
-}
 
 /// Parse a criterion comment like "openssl is earlier than 1:3.0.7-25.el9"
 /// into (package_name, version).
@@ -165,7 +155,7 @@ pub fn parse_oval_xml(
                     }
                 } else if in_severity {
                     if let Ok(text) = e.unescape() {
-                        severity = map_oval_severity(&text);
+                        severity = Severity::parse(&text);
                     }
                 }
             }
@@ -298,10 +288,10 @@ mod tests {
 
     #[test]
     fn test_oval_severity_mapping() {
-        assert_eq!(map_oval_severity("Critical"), Severity::Critical);
-        assert_eq!(map_oval_severity("Important"), Severity::High);
-        assert_eq!(map_oval_severity("Moderate"), Severity::Medium);
-        assert_eq!(map_oval_severity("Low"), Severity::Low);
-        assert_eq!(map_oval_severity(""), Severity::None);
+        assert_eq!(Severity::parse("Critical"), Severity::Critical);
+        assert_eq!(Severity::parse("Important"), Severity::High);
+        assert_eq!(Severity::parse("Moderate"), Severity::Medium);
+        assert_eq!(Severity::parse("Low"), Severity::Low);
+        assert_eq!(Severity::parse(""), Severity::None);
     }
 }

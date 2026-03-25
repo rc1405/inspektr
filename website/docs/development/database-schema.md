@@ -82,7 +82,7 @@ The composite primary key `(id, source)` allows the same vulnerability (e.g., `C
 
 Sources: `osv`, `nvd`, `photon`, `oracle`, `azurelinux`, `bottlerocket`.
 
-The `clear_source()` method deletes all data for a specific source, enabling clean re-imports without affecting data from other sources. CentOS data is handled as a special case — RHEL entries are duplicated with CentOS ecosystem names after OSV import.
+The `clear_source()` method deletes all data for a specific source, enabling clean re-imports without affecting data from other sources.
 
 ## Versioned Ecosystem Names
 

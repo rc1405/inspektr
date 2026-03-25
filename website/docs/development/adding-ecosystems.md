@@ -25,6 +25,14 @@ Add `to_purl()` arm:
 Ecosystem::MyEcosystem => format!("pkg:mytype/{}@{}", self.name, self.version),
 ```
 
+Add a PURL prefix match in `Ecosystem::from_purl()`:
+
+```rust
+purl if purl.starts_with("pkg:mytype/") => Some(Ecosystem::MyEcosystem),
+```
+
+`Ecosystem::from_purl()` is the centralized method for mapping PURL strings to ecosystems. All new ecosystems should add their PURL prefix here.
+
 ### 2. Create the cataloger
 
 Create `inspektr/src/cataloger/myecosystem.rs`:
@@ -98,7 +106,11 @@ In both `inspektr/src/sbom/cyclonedx.rs` and `inspektr/src/sbom/spdx.rs`, add PU
 }
 ```
 
-### 5. Add to ALL_ECOSYSTEMS (if OSV has data)
+### 5. Severity parsing
+
+Use `Severity::parse()` for converting severity strings — there is no need to create per-importer severity parsers. This centralized method handles all common severity string formats (e.g., "CRITICAL", "High", "medium").
+
+### 6. Add to ALL_ECOSYSTEMS (if OSV has data)
 
 In `inspektr/src/db/mod.rs`:
 

@@ -25,7 +25,7 @@ Inspektr detects and scans OS packages in container images across 18 Linux distr
 | Distribution | os-release ID | Vuln Data Source |
 |-------------|--------------|-----------------|
 | Red Hat Enterprise Linux | `rhel` | OSV |
-| CentOS | `centos` | OSV (RHEL proxy) |
+| CentOS | `centos` | NVD only (EOL) |
 | Rocky Linux | `rocky` | OSV |
 | AlmaLinux | `almalinux` | OSV |
 | Oracle Linux | `ol` | Oracle OVAL XML |

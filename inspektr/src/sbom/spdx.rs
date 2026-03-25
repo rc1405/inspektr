@@ -115,7 +115,7 @@ impl SbomFormat for SpdxFormat {
                     .map(|r| r.reference_locator.clone())
                     .unwrap_or_default();
 
-                let ecosystem = ecosystem_from_purl(&purl);
+                let ecosystem = Ecosystem::from_purl(&purl);
 
                 Package {
                     name: sp.name,
@@ -135,41 +135,6 @@ impl SbomFormat for SpdxFormat {
             },
             packages,
         })
-    }
-}
-
-/// Detect ecosystem from PURL prefix.
-fn ecosystem_from_purl(purl: &str) -> Ecosystem {
-    if purl.starts_with("pkg:golang/") {
-        Ecosystem::Go
-    } else if purl.starts_with("pkg:npm/") {
-        Ecosystem::JavaScript
-    } else if purl.starts_with("pkg:pypi/") {
-        Ecosystem::Python
-    } else if purl.starts_with("pkg:maven/") {
-        Ecosystem::Java
-    } else if purl.starts_with("pkg:conan/") {
-        Ecosystem::Conan
-    } else if purl.starts_with("pkg:vcpkg/") {
-        Ecosystem::Vcpkg
-    } else if purl.starts_with("pkg:nuget/") {
-        Ecosystem::DotNet
-    } else if purl.starts_with("pkg:composer/") {
-        Ecosystem::Php
-    } else if purl.starts_with("pkg:cargo/") {
-        Ecosystem::Rust
-    } else if purl.starts_with("pkg:gem/") {
-        Ecosystem::Ruby
-    } else if purl.starts_with("pkg:swift/") {
-        Ecosystem::Swift
-    } else if purl.starts_with("pkg:deb/") {
-        Ecosystem::Debian
-    } else if purl.starts_with("pkg:apk/") {
-        Ecosystem::Alpine
-    } else if purl.starts_with("pkg:rpm/") {
-        Ecosystem::RedHat
-    } else {
-        Ecosystem::Go // fallback
     }
 }
 

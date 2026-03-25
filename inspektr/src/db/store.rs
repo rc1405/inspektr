@@ -1,6 +1,7 @@
 use crate::error::DatabaseError;
 use crate::models::Severity;
 use rusqlite::{Connection, params};
+use std::collections::HashMap;
 
 /// A vulnerability record to be stored in the database.
 #[derive(Debug, Clone)]
@@ -261,14 +262,26 @@ impl VulnStore {
     /// Delete all data for a given source (e.g., "osv" or "nvd").
     /// Call this before a full re-import to avoid per-record delete overhead.
     pub fn clear_source(&mut self, source: &str) -> Result<(), DatabaseError> {
-        self.conn
-            .execute_batch(&format!(
-                "DELETE FROM affected_ranges WHERE affected_id IN
-                 (SELECT id FROM affected_packages WHERE vuln_source = '{source}');
-                 DELETE FROM affected_packages WHERE vuln_source = '{source}';
-                 DELETE FROM vulnerabilities WHERE source = '{source}';",
-            ))
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
+        let tx = self.conn.unchecked_transaction()
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+
+        tx.execute(
+            "DELETE FROM affected_ranges WHERE affected_id IN
+             (SELECT id FROM affected_packages WHERE vuln_source = ?1)",
+            params![source],
+        ).map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+
+        tx.execute(
+            "DELETE FROM affected_packages WHERE vuln_source = ?1",
+            params![source],
+        ).map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+
+        tx.execute(
+            "DELETE FROM vulnerabilities WHERE source = ?1",
+            params![source],
+        ).map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+
+        tx.commit().map_err(|e| DatabaseError::Sqlite(e.to_string()))
     }
 
     /// Insert a slice of vulnerability records in a single transaction.
@@ -326,6 +339,9 @@ impl VulnStore {
     }
 
     /// Query vulnerabilities affecting the given ecosystem and package name.
+    ///
+    /// Uses a single JOIN query across vulnerabilities → affected_packages →
+    /// affected_ranges, then groups the results in Rust to avoid N+1 queries.
     pub fn query(
         &self,
         ecosystem: &str,
@@ -335,31 +351,40 @@ impl VulnStore {
             .conn
             .prepare(
                 "SELECT v.id, v.summary, v.details, v.severity, v.published, v.modified,
-                        ap.id AS affected_id, v.source, v.cvss_score
+                        ap.id AS affected_id, v.source, v.cvss_score,
+                        ar.range_type, ar.introduced, ar.fixed
                  FROM vulnerabilities v
                  JOIN affected_packages ap ON ap.vuln_id = v.id AND ap.vuln_source = v.source
+                 LEFT JOIN affected_ranges ar ON ar.affected_id = ap.id
                  WHERE ap.ecosystem = ?1 AND ap.package_name = ?2
                    AND v.withdrawn IS NULL",
             )
             .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
 
+        // Each row may repeat the vulnerability fields for multiple ranges.
+        // Key: (id, source, affected_id) → index into `ordered` Vec.
+        let mut index: HashMap<(String, String, i64), usize> = HashMap::new();
+        let mut ordered: Vec<VulnQueryResult> = Vec::new();
+
         let rows = stmt
             .query_map(params![ecosystem, package_name], |row| {
                 Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                    row.get::<_, i64>(6)?,
-                    row.get::<_, String>(7)?,
-                    row.get::<_, Option<f64>>(8)?,
+                    row.get::<_, String>(0)?,   // id
+                    row.get::<_, String>(1)?,   // summary
+                    row.get::<_, String>(2)?,   // details
+                    row.get::<_, String>(3)?,   // severity
+                    row.get::<_, String>(4)?,   // published
+                    row.get::<_, String>(5)?,   // modified
+                    row.get::<_, i64>(6)?,      // affected_id
+                    row.get::<_, String>(7)?,   // source
+                    row.get::<_, Option<f64>>(8)?,  // cvss_score
+                    row.get::<_, Option<String>>(9)?,   // range_type
+                    row.get::<_, Option<String>>(10)?,  // introduced
+                    row.get::<_, Option<String>>(11)?,  // fixed
                 ))
             })
             .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
 
-        let mut results = Vec::new();
         for row in rows {
             let (
                 id,
@@ -371,32 +396,43 @@ impl VulnStore {
                 affected_id,
                 source,
                 cvss_score,
+                range_type,
+                introduced,
+                fixed,
             ) = row.map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
 
-            let severity = parse_severity_str(&severity_str);
-            let ranges = self.query_ranges(affected_id as i64)?;
+            let key = (id.clone(), source.clone(), affected_id);
 
-            results.push(VulnQueryResult {
-                id,
-                summary,
-                details,
-                severity,
-                published,
-                modified,
-                source,
-                cvss_score,
-                ranges,
-            });
+            let idx = if let Some(&i) = index.get(&key) {
+                i
+            } else {
+                let i = ordered.len();
+                index.insert(key, i);
+                ordered.push(VulnQueryResult {
+                    id,
+                    summary,
+                    details,
+                    severity: Severity::parse(&severity_str),
+                    published,
+                    modified,
+                    source,
+                    cvss_score,
+                    ranges: Vec::new(),
+                });
+                i
+            };
+
+            // Append the range if this row carries one (LEFT JOIN may return NULLs).
+            if let Some(rt) = range_type {
+                ordered[idx].ranges.push(AffectedRange {
+                    range_type: rt,
+                    introduced,
+                    fixed,
+                });
+            }
         }
 
-        Ok(results)
-    }
-
-    /// Execute arbitrary SQL (used for bulk operations like ecosystem duplication).
-    pub fn execute_sql(&mut self, sql: &str) -> Result<usize, DatabaseError> {
-        self.conn
-            .execute(sql, [])
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
+        Ok(ordered)
     }
 
     /// Retrieve the version ranges for a given affected_packages row id.
@@ -422,16 +458,6 @@ impl VulnStore {
 
         rows.map(|r| r.map_err(|e| DatabaseError::QueryFailed(e.to_string())))
             .collect()
-    }
-}
-
-fn parse_severity_str(s: &str) -> Severity {
-    match s {
-        "Critical" => Severity::Critical,
-        "High" => Severity::High,
-        "Medium" => Severity::Medium,
-        "Low" => Severity::Low,
-        _ => Severity::None,
     }
 }
 

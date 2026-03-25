@@ -80,6 +80,86 @@ pub enum Ecosystem {
 }
 
 impl Ecosystem {
+    /// Detect ecosystem from a PURL string prefix.
+    ///
+    /// For OS package types (`deb`, `apk`, `rpm`), the namespace is inspected
+    /// to pick the right distro variant.
+    ///
+    /// # Fallback
+    /// Unrecognized PURL prefixes currently default to `Ecosystem::Go` because
+    /// adding an `Unknown` variant would require updating every `match` on
+    /// `Ecosystem` across the codebase.  A warning is printed to stderr so
+    /// the caller is aware of the miss.
+    pub fn from_purl(purl: &str) -> Ecosystem {
+        if purl.starts_with("pkg:golang/") {
+            Ecosystem::Go
+        } else if purl.starts_with("pkg:npm/") {
+            Ecosystem::JavaScript
+        } else if purl.starts_with("pkg:pypi/") {
+            Ecosystem::Python
+        } else if purl.starts_with("pkg:maven/") {
+            Ecosystem::Java
+        } else if purl.starts_with("pkg:conan/") {
+            Ecosystem::Conan
+        } else if purl.starts_with("pkg:vcpkg/") {
+            Ecosystem::Vcpkg
+        } else if purl.starts_with("pkg:nuget/") {
+            Ecosystem::DotNet
+        } else if purl.starts_with("pkg:composer/") {
+            Ecosystem::Php
+        } else if purl.starts_with("pkg:cargo/") {
+            Ecosystem::Rust
+        } else if purl.starts_with("pkg:gem/") {
+            Ecosystem::Ruby
+        } else if purl.starts_with("pkg:swift/") {
+            Ecosystem::Swift
+        } else if purl.starts_with("pkg:deb/") {
+            if purl.starts_with("pkg:deb/ubuntu/") {
+                Ecosystem::Ubuntu
+            } else {
+                Ecosystem::Debian
+            }
+        } else if purl.starts_with("pkg:apk/") {
+            if purl.starts_with("pkg:apk/wolfi/") {
+                Ecosystem::Wolfi
+            } else if purl.starts_with("pkg:apk/chainguard/") {
+                Ecosystem::Chainguard
+            } else {
+                Ecosystem::Alpine
+            }
+        } else if purl.starts_with("pkg:rpm/") {
+            if purl.starts_with("pkg:rpm/centos/") {
+                Ecosystem::CentOS
+            } else if purl.starts_with("pkg:rpm/rocky/") {
+                Ecosystem::Rocky
+            } else if purl.starts_with("pkg:rpm/almalinux/") {
+                Ecosystem::AlmaLinux
+            } else if purl.starts_with("pkg:rpm/oraclelinux/") {
+                Ecosystem::OracleLinux
+            } else if purl.starts_with("pkg:rpm/suse/") {
+                Ecosystem::SUSE
+            } else if purl.starts_with("pkg:rpm/photon/") {
+                Ecosystem::Photon
+            } else if purl.starts_with("pkg:rpm/azurelinux/") {
+                Ecosystem::AzureLinux
+            } else if purl.starts_with("pkg:rpm/coreos/") {
+                Ecosystem::CoreOS
+            } else if purl.starts_with("pkg:rpm/bottlerocket/") {
+                Ecosystem::Bottlerocket
+            } else if purl.starts_with("pkg:rpm/echo/") {
+                Ecosystem::Echo
+            } else if purl.starts_with("pkg:rpm/minimos/") {
+                Ecosystem::MinimOS
+            } else {
+                Ecosystem::RedHat
+            }
+        } else {
+            // TODO: add an Ecosystem::Unknown variant to avoid this misleading fallback.
+            eprintln!("WARNING: unrecognized PURL prefix, defaulting to Go: {}", purl);
+            Ecosystem::Go
+        }
+    }
+
     pub fn as_osv_ecosystem(&self) -> &'static str {
         match self {
             Ecosystem::Go => "Go",
@@ -195,6 +275,24 @@ pub enum Severity {
     Medium,
     High,
     Critical,
+}
+
+impl Severity {
+    /// Parse a severity string (case-insensitive) into a `Severity` value.
+    ///
+    /// Handles common synonyms used by different vulnerability databases:
+    /// - NVD uses uppercase (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`)
+    /// - OVAL uses title case with synonyms (`Important`, `Moderate`)
+    /// - OSV uses uppercase with `MODERATE` as an alias for `MEDIUM`
+    pub fn parse(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "CRITICAL" => Severity::Critical,
+            "HIGH" | "IMPORTANT" => Severity::High,
+            "MEDIUM" | "MODERATE" => Severity::Medium,
+            "LOW" => Severity::Low,
+            _ => Severity::None,
+        }
+    }
 }
 
 /// A vulnerability record from the database.
@@ -422,5 +520,101 @@ mod tests {
             make_pkg("github.com/apple/swift-nio", "2.62.0", Ecosystem::Swift).to_purl(),
             "pkg:swift/github.com/apple/swift-nio@2.62.0"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Ecosystem::from_purl tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_from_purl_language_ecosystems() {
+        assert_eq!(Ecosystem::from_purl("pkg:golang/github.com/x/y@v1.0"), Ecosystem::Go);
+        assert_eq!(Ecosystem::from_purl("pkg:npm/express@4.18.2"), Ecosystem::JavaScript);
+        assert_eq!(Ecosystem::from_purl("pkg:pypi/requests@2.31.0"), Ecosystem::Python);
+        assert_eq!(Ecosystem::from_purl("pkg:maven/org.apache/commons@3.14"), Ecosystem::Java);
+        assert_eq!(Ecosystem::from_purl("pkg:conan/zlib@1.2.11"), Ecosystem::Conan);
+        assert_eq!(Ecosystem::from_purl("pkg:vcpkg/zlib@1.2.11"), Ecosystem::Vcpkg);
+        assert_eq!(Ecosystem::from_purl("pkg:nuget/Newtonsoft.Json@13.0"), Ecosystem::DotNet);
+        assert_eq!(Ecosystem::from_purl("pkg:composer/monolog/monolog@3.5"), Ecosystem::Php);
+        assert_eq!(Ecosystem::from_purl("pkg:cargo/serde@1.0.193"), Ecosystem::Rust);
+        assert_eq!(Ecosystem::from_purl("pkg:gem/rails@7.1.2"), Ecosystem::Ruby);
+        assert_eq!(Ecosystem::from_purl("pkg:swift/github.com/apple/swift-nio@2.62"), Ecosystem::Swift);
+    }
+
+    #[test]
+    fn test_from_purl_deb_namespaces() {
+        assert_eq!(Ecosystem::from_purl("pkg:deb/ubuntu/libc6@2.38"), Ecosystem::Ubuntu);
+        assert_eq!(Ecosystem::from_purl("pkg:deb/debian/libc6@2.36"), Ecosystem::Debian);
+        // Unknown deb namespace defaults to Debian
+        assert_eq!(Ecosystem::from_purl("pkg:deb/other/libc6@2.36"), Ecosystem::Debian);
+    }
+
+    #[test]
+    fn test_from_purl_apk_namespaces() {
+        assert_eq!(Ecosystem::from_purl("pkg:apk/wolfi/musl@1.2"), Ecosystem::Wolfi);
+        assert_eq!(Ecosystem::from_purl("pkg:apk/chainguard/musl@1.2"), Ecosystem::Chainguard);
+        assert_eq!(Ecosystem::from_purl("pkg:apk/alpine/musl@1.2"), Ecosystem::Alpine);
+        // Unknown apk namespace defaults to Alpine
+        assert_eq!(Ecosystem::from_purl("pkg:apk/other/musl@1.2"), Ecosystem::Alpine);
+    }
+
+    #[test]
+    fn test_from_purl_rpm_namespaces() {
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/redhat/glibc@2.34"), Ecosystem::RedHat);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/centos/glibc@2.34"), Ecosystem::CentOS);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/rocky/glibc@2.34"), Ecosystem::Rocky);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/almalinux/glibc@2.34"), Ecosystem::AlmaLinux);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/oraclelinux/glibc@2.34"), Ecosystem::OracleLinux);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/suse/glibc@2.34"), Ecosystem::SUSE);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/photon/glibc@2.34"), Ecosystem::Photon);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/azurelinux/glibc@2.34"), Ecosystem::AzureLinux);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/coreos/glibc@2.34"), Ecosystem::CoreOS);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/bottlerocket/glibc@2.34"), Ecosystem::Bottlerocket);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/echo/glibc@2.34"), Ecosystem::Echo);
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/minimos/glibc@2.34"), Ecosystem::MinimOS);
+        // Unknown rpm namespace defaults to RedHat
+        assert_eq!(Ecosystem::from_purl("pkg:rpm/unknown/glibc@2.34"), Ecosystem::RedHat);
+    }
+
+    #[test]
+    fn test_from_purl_unknown_fallback() {
+        // Unrecognized PURL prefix falls back to Go (with a warning on stderr)
+        assert_eq!(Ecosystem::from_purl("pkg:unknown/foo@1.0"), Ecosystem::Go);
+        assert_eq!(Ecosystem::from_purl(""), Ecosystem::Go);
+    }
+
+    // -----------------------------------------------------------------------
+    // Severity::parse tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_severity_parse_standard() {
+        assert_eq!(Severity::parse("CRITICAL"), Severity::Critical);
+        assert_eq!(Severity::parse("HIGH"), Severity::High);
+        assert_eq!(Severity::parse("MEDIUM"), Severity::Medium);
+        assert_eq!(Severity::parse("LOW"), Severity::Low);
+    }
+
+    #[test]
+    fn test_severity_parse_synonyms() {
+        assert_eq!(Severity::parse("IMPORTANT"), Severity::High);
+        assert_eq!(Severity::parse("MODERATE"), Severity::Medium);
+    }
+
+    #[test]
+    fn test_severity_parse_case_insensitive() {
+        assert_eq!(Severity::parse("Critical"), Severity::Critical);
+        assert_eq!(Severity::parse("high"), Severity::High);
+        assert_eq!(Severity::parse("Medium"), Severity::Medium);
+        assert_eq!(Severity::parse("Important"), Severity::High);
+        assert_eq!(Severity::parse("Moderate"), Severity::Medium);
+        assert_eq!(Severity::parse("low"), Severity::Low);
+    }
+
+    #[test]
+    fn test_severity_parse_unknown() {
+        assert_eq!(Severity::parse("UNKNOWN"), Severity::None);
+        assert_eq!(Severity::parse(""), Severity::None);
+        assert_eq!(Severity::parse("N/A"), Severity::None);
     }
 }

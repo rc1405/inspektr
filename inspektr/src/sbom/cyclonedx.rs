@@ -64,37 +64,7 @@ impl SbomFormat for CycloneDxFormat {
             .components
             .into_iter()
             .map(|comp| {
-                let ecosystem = if comp.purl.starts_with("pkg:golang/") {
-                    Ecosystem::Go
-                } else if comp.purl.starts_with("pkg:npm/") {
-                    Ecosystem::JavaScript
-                } else if comp.purl.starts_with("pkg:pypi/") {
-                    Ecosystem::Python
-                } else if comp.purl.starts_with("pkg:maven/") {
-                    Ecosystem::Java
-                } else if comp.purl.starts_with("pkg:conan/") {
-                    Ecosystem::Conan
-                } else if comp.purl.starts_with("pkg:vcpkg/") {
-                    Ecosystem::Vcpkg
-                } else if comp.purl.starts_with("pkg:nuget/") {
-                    Ecosystem::DotNet
-                } else if comp.purl.starts_with("pkg:composer/") {
-                    Ecosystem::Php
-                } else if comp.purl.starts_with("pkg:cargo/") {
-                    Ecosystem::Rust
-                } else if comp.purl.starts_with("pkg:gem/") {
-                    Ecosystem::Ruby
-                } else if comp.purl.starts_with("pkg:swift/") {
-                    Ecosystem::Swift
-                } else if comp.purl.starts_with("pkg:deb/") {
-                    Ecosystem::Debian
-                } else if comp.purl.starts_with("pkg:apk/") {
-                    Ecosystem::Alpine
-                } else if comp.purl.starts_with("pkg:rpm/") {
-                    Ecosystem::RedHat
-                } else {
-                    Ecosystem::Go // fallback
-                };
+                let ecosystem = Ecosystem::from_purl(&comp.purl);
                 Package {
                     name: comp.name,
                     version: comp.version,
