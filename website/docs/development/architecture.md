@@ -102,6 +102,11 @@ for each VulnSource:
   -> source.import(store, ecosystem)
     -> OSV: download ZIP, parse JSON entries -> VulnRecord -> insert
     -> NVD: paginate API, resolve CPE -> VulnRecord -> insert
+    -> Oracle: download OVAL XML (bzip2), parse definitions -> VulnRecord -> insert
+    -> Photon: download JSON CVE metadata -> VulnRecord -> insert
+    -> Azure Linux: download OVAL XML from GitHub -> VulnRecord -> insert
+    -> Bottlerocket: download updateinfo.xml (gzip) -> VulnRecord -> insert
+    -> CentOS: duplicated from Red Hat data after OSV import
 ```
 
 ## Feature Flags
@@ -109,7 +114,7 @@ for each VulnSource:
 | Feature | What it enables |
 |---------|----------------|
 | `default` | SBOM generation, vulnerability scanning, database pull |
-| `db-admin` | `db build`, `db push` — OSV/NVD import, OCI push |
+| `db-admin` | `db build`, `db push` — all vulnerability importers, OCI push. Adds `quick-xml`, `bzip2`, `zip` dependencies. |
 
 ## Module Map
 
@@ -119,7 +124,7 @@ for each VulnSource:
 | `source/` | `Source` trait, filesystem/OCI implementations, target detection |
 | `cataloger/` | `Cataloger` trait, 12 language catalogers, OS cataloger |
 | `sbom/` | `SbomFormat` trait, CycloneDX, SPDX |
-| `db/` | `VulnSource` trait, SQLite store, OSV importer, NVD client |
+| `db/` | `VulnSource` trait, SQLite store, importers (OSV, NVD, Oracle OVAL, Photon, Azure Linux, Bottlerocket) |
 | `vuln/` | Matcher (semver + OS fallback), report types, renderers |
 | `oci/` | OCI registry client, image reference parsing, auth |
 | `cpe/` | CPE 2.3 parser, target_sw/vendor mappings for NVD |

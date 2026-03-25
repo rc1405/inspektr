@@ -7,6 +7,21 @@ pub mod osv;
 pub mod nvd;
 
 #[cfg(feature = "db-admin")]
+pub mod photon;
+
+#[cfg(feature = "db-admin")]
+pub mod oval;
+
+#[cfg(feature = "db-admin")]
+pub mod oracle;
+
+#[cfg(feature = "db-admin")]
+pub mod azure_linux;
+
+#[cfg(feature = "db-admin")]
+pub mod bottlerocket;
+
+#[cfg(feature = "db-admin")]
 use crate::error::DatabaseError;
 #[cfg(feature = "db-admin")]
 use store::VulnStore;
@@ -22,11 +37,8 @@ pub trait VulnSource {
     ) -> Result<usize, DatabaseError>;
 }
 
-/// All known ecosystem strings (canonical form).
+/// Ecosystems with OSV bulk download availability.
 #[cfg(feature = "db-admin")]
-/// Ecosystems with confirmed OSV bulk download availability.
-/// Ecosystems not listed here (e.g., ConanCenter, Oracle, CentOS, CoreOS,
-/// Bottlerocket, Photon OS, Azure Linux) have no OSV bulk data.
 pub const ALL_ECOSYSTEMS: &[&str] = &[
     // Language ecosystems
     "Go",
@@ -38,7 +50,7 @@ pub const ALL_ECOSYSTEMS: &[&str] = &[
     "crates.io",
     "RubyGems",
     "SwiftURL",
-    // OS ecosystems
+    // OS ecosystems (OSV)
     "Alpine",
     "Wolfi",
     "Chainguard",
@@ -52,11 +64,24 @@ pub const ALL_ECOSYSTEMS: &[&str] = &[
     "MinimOS",
 ];
 
+/// Additional ecosystem names accepted for --ecosystem filtering.
+/// These are handled by distro-native importers, not OSV.
+#[cfg(feature = "db-admin")]
+const DISTRO_ECOSYSTEMS: &[&str] = &[
+    "CentOS",
+    "Oracle",
+    "Photon OS",
+    "Azure Linux",
+    "Bottlerocket",
+];
+
 /// Normalize an ecosystem string to canonical form (case-insensitive match).
+/// Accepts both OSV ecosystem names and distro-native ecosystem names.
 #[cfg(feature = "db-admin")]
 pub fn normalize_ecosystem(input: &str) -> Option<&'static str> {
     ALL_ECOSYSTEMS
         .iter()
+        .chain(DISTRO_ECOSYSTEMS.iter())
         .find(|&&canonical| canonical.eq_ignore_ascii_case(input))
         .copied()
 }
@@ -64,7 +89,14 @@ pub fn normalize_ecosystem(input: &str) -> Option<&'static str> {
 /// Return all registered vulnerability sources.
 #[cfg(feature = "db-admin")]
 pub fn vuln_sources() -> Vec<Box<dyn VulnSource>> {
-    vec![Box::new(osv::OsvSource), Box::new(nvd::NvdSource::new())]
+    vec![
+        Box::new(osv::OsvSource),
+        Box::new(nvd::NvdSource::new()),
+        Box::new(photon::PhotonSource),
+        Box::new(oracle::OracleSource),
+        Box::new(azure_linux::AzureLinuxSource),
+        Box::new(bottlerocket::BottlerocketSource),
+    ]
 }
 
 #[cfg(all(test, feature = "db-admin"))]
@@ -79,5 +111,11 @@ mod tests {
         assert_eq!(normalize_ecosystem("go"), Some("Go"));
         assert_eq!(normalize_ecosystem("maven"), Some("Maven"));
         assert_eq!(normalize_ecosystem("unknown"), None);
+        // Distro-native ecosystems
+        assert_eq!(normalize_ecosystem("centos"), Some("CentOS"));
+        assert_eq!(normalize_ecosystem("oracle"), Some("Oracle"));
+        assert_eq!(normalize_ecosystem("photon os"), Some("Photon OS"));
+        assert_eq!(normalize_ecosystem("azure linux"), Some("Azure Linux"));
+        assert_eq!(normalize_ecosystem("bottlerocket"), Some("Bottlerocket"));
     }
 }

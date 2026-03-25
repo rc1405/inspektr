@@ -6,36 +6,36 @@ Inspektr detects and scans OS packages in container images across 18 Linux distr
 
 ### apk-based
 
-| Distribution | os-release ID | OSV Ecosystem |
-|-------------|--------------|---------------|
-| Alpine Linux | `alpine` | `Alpine` |
-| Wolfi | `wolfi` | `Wolfi` |
-| Chainguard | `chainguard` | `Chainguard` |
+| Distribution | os-release ID | Vuln Data Source |
+|-------------|--------------|-----------------|
+| Alpine Linux | `alpine` | OSV |
+| Wolfi | `wolfi` | OSV |
+| Chainguard | `chainguard` | OSV |
 
 ### dpkg-based
 
-| Distribution | os-release ID | OSV Ecosystem |
-|-------------|--------------|---------------|
-| Debian | `debian` | `Debian` |
-| Ubuntu | `ubuntu` | `Ubuntu` |
-| Google Distroless | (detected by dpkg presence) | `Debian` |
+| Distribution | os-release ID | Vuln Data Source |
+|-------------|--------------|-----------------|
+| Debian | `debian` | OSV |
+| Ubuntu | `ubuntu` | OSV |
+| Google Distroless | (detected by dpkg presence) | OSV (Debian) |
 
 ### rpm-based
 
-| Distribution | os-release ID | OSV Ecosystem |
-|-------------|--------------|---------------|
-| Red Hat Enterprise Linux | `rhel` | `Red Hat` |
-| CentOS | `centos` | `CentOS` |
-| Rocky Linux | `rocky` | `Rocky Linux` |
-| AlmaLinux | `almalinux` | `AlmaLinux` |
-| Oracle Linux | `ol` | `Oracle` |
-| SUSE/openSUSE | `sles`, `opensuse-leap`, `opensuse-tumbleweed` | `SUSE` |
-| Photon OS | `photon` | `Photon OS` |
-| Azure Linux (Mariner) | `azurelinux`, `mariner` | `Azure Linux` |
-| CoreOS | `coreos` | `CoreOS` |
-| Bottlerocket | `bottlerocket` | `Bottlerocket` |
-| Echo | `echo` | `Echo` |
-| MinimOS | `minimos` | `MinimOS` |
+| Distribution | os-release ID | Vuln Data Source |
+|-------------|--------------|-----------------|
+| Red Hat Enterprise Linux | `rhel` | OSV |
+| CentOS | `centos` | OSV (RHEL proxy) |
+| Rocky Linux | `rocky` | OSV |
+| AlmaLinux | `almalinux` | OSV |
+| Oracle Linux | `ol` | Oracle OVAL XML |
+| SUSE/openSUSE | `sles`, `opensuse-leap`, `opensuse-tumbleweed` | OSV |
+| Photon OS | `photon` | Photon OS JSON |
+| Azure Linux (Mariner) | `azurelinux`, `mariner` | Azure Linux OVAL XML |
+| CoreOS | `coreos` | NVD only (no distro feed) |
+| Bottlerocket | `bottlerocket` | Bottlerocket updateinfo.xml |
+| Echo | `echo` | OSV |
+| MinimOS | `minimos` | OSV |
 
 ## How OS Detection Works
 

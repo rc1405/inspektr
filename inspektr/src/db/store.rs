@@ -392,6 +392,13 @@ impl VulnStore {
         Ok(results)
     }
 
+    /// Execute arbitrary SQL (used for bulk operations like ecosystem duplication).
+    pub fn execute_sql(&mut self, sql: &str) -> Result<usize, DatabaseError> {
+        self.conn
+            .execute(sql, [])
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
+    }
+
     /// Retrieve the version ranges for a given affected_packages row id.
     pub fn query_ranges(&self, affected_id: i64) -> Result<Vec<AffectedRange>, DatabaseError> {
         let mut stmt = self

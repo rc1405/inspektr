@@ -9,7 +9,7 @@ A software composition analysis (SCA) tool for generating Software Bills of Mate
 - **11 Language Ecosystems**: Go, JavaScript/Node, Python, Java, C/C++ (Conan, vcpkg), .NET, PHP, Rust, Ruby, Swift
 - **18 OS Distributions**: Alpine, Wolfi, Chainguard, Debian, Ubuntu, Distroless, RHEL, CentOS, Rocky, Alma, Oracle, SUSE, Photon, Azure Linux, CoreOS, Bottlerocket, Echo, MinimOS
 - **Multiple SBOM Formats**: CycloneDX 1.5 JSON, SPDX 2.3 JSON
-- **Multiple Vulnerability Sources**: OSV (bulk download), NVD (CVE API 2.0 with incremental updates)
+- **Multiple Vulnerability Sources**: OSV, NVD, Oracle OVAL, Photon OS, Azure Linux OVAL, Bottlerocket
 - **OCI Distribution**: Pre-built vulnerability databases distributed as OCI artifacts
 - **Dual-use**: CLI tool and Rust library
 
@@ -88,6 +88,18 @@ See [docs/usage.md](docs/usage.md) for detailed usage documentation.
 | dpkg | Debian, Ubuntu, Distroless |
 | apk | Alpine, Wolfi, Chainguard |
 | rpm | RHEL, CentOS, Rocky, Alma, Oracle, SUSE, Photon, Azure Linux, CoreOS, Bottlerocket, Echo, MinimOS |
+
+### Vulnerability Data Sources
+
+| Source | Coverage |
+|--------|----------|
+| OSV | Alpine, Wolfi, Chainguard, Debian, Ubuntu, Red Hat, Rocky, AlmaLinux, SUSE, Echo, MinimOS + all language ecosystems |
+| NVD | All ecosystems via CVE/CPE mapping |
+| Oracle OVAL | Oracle Linux 7/8/9 |
+| Photon OS JSON | Photon OS 1.0–5.0 |
+| Azure Linux OVAL | CBL-Mariner 1.0/2.0, Azure Linux 3.0 |
+| Bottlerocket | Bottlerocket (updateinfo.xml) |
+| RHEL proxy | CentOS (uses Red Hat vulnerability data) |
 
 ## Architecture
 
