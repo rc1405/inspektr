@@ -67,12 +67,7 @@ pub const ALL_ECOSYSTEMS: &[&str] = &[
 /// Additional ecosystem names accepted for --ecosystem filtering.
 /// These are handled by distro-native importers, not OSV.
 #[cfg(feature = "db-admin")]
-const DISTRO_ECOSYSTEMS: &[&str] = &[
-    "Oracle",
-    "Photon OS",
-    "Azure Linux",
-    "Bottlerocket",
-];
+const DISTRO_ECOSYSTEMS: &[&str] = &["Oracle", "Photon OS", "Azure Linux", "Bottlerocket"];
 
 /// Normalize an ecosystem string to canonical form (case-insensitive match).
 /// Accepts both OSV ecosystem names and distro-native ecosystem names.

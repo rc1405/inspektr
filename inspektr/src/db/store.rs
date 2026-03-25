@@ -262,26 +262,32 @@ impl VulnStore {
     /// Delete all data for a given source (e.g., "osv" or "nvd").
     /// Call this before a full re-import to avoid per-record delete overhead.
     pub fn clear_source(&mut self, source: &str) -> Result<(), DatabaseError> {
-        let tx = self.conn.unchecked_transaction()
+        let tx = self
+            .conn
+            .unchecked_transaction()
             .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
 
         tx.execute(
             "DELETE FROM affected_ranges WHERE affected_id IN
              (SELECT id FROM affected_packages WHERE vuln_source = ?1)",
             params![source],
-        ).map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+        )
+        .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
 
         tx.execute(
             "DELETE FROM affected_packages WHERE vuln_source = ?1",
             params![source],
-        ).map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+        )
+        .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
 
         tx.execute(
             "DELETE FROM vulnerabilities WHERE source = ?1",
             params![source],
-        ).map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+        )
+        .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
 
-        tx.commit().map_err(|e| DatabaseError::Sqlite(e.to_string()))
+        tx.commit()
+            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
     }
 
     /// Insert a slice of vulnerability records in a single transaction.
@@ -369,18 +375,18 @@ impl VulnStore {
         let rows = stmt
             .query_map(params![ecosystem, package_name], |row| {
                 Ok((
-                    row.get::<_, String>(0)?,   // id
-                    row.get::<_, String>(1)?,   // summary
-                    row.get::<_, String>(2)?,   // details
-                    row.get::<_, String>(3)?,   // severity
-                    row.get::<_, String>(4)?,   // published
-                    row.get::<_, String>(5)?,   // modified
-                    row.get::<_, i64>(6)?,      // affected_id
-                    row.get::<_, String>(7)?,   // source
-                    row.get::<_, Option<f64>>(8)?,  // cvss_score
-                    row.get::<_, Option<String>>(9)?,   // range_type
-                    row.get::<_, Option<String>>(10)?,  // introduced
-                    row.get::<_, Option<String>>(11)?,  // fixed
+                    row.get::<_, String>(0)?,          // id
+                    row.get::<_, String>(1)?,          // summary
+                    row.get::<_, String>(2)?,          // details
+                    row.get::<_, String>(3)?,          // severity
+                    row.get::<_, String>(4)?,          // published
+                    row.get::<_, String>(5)?,          // modified
+                    row.get::<_, i64>(6)?,             // affected_id
+                    row.get::<_, String>(7)?,          // source
+                    row.get::<_, Option<f64>>(8)?,     // cvss_score
+                    row.get::<_, Option<String>>(9)?,  // range_type
+                    row.get::<_, Option<String>>(10)?, // introduced
+                    row.get::<_, Option<String>>(11)?, // fixed
                 ))
             })
             .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;

@@ -59,7 +59,6 @@ pub struct OsvDatabaseSpecific {
 // Parsing helpers
 // ---------------------------------------------------------------------------
 
-
 /// Parse a single OSV JSON string into a `VulnRecord`.
 ///
 /// OSV represents affected ranges as a list of events in the form
@@ -384,5 +383,4 @@ mod tests {
         let source = OsvSource;
         assert_eq!(source.name(), "osv");
     }
-
 }

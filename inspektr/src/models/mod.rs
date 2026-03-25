@@ -45,6 +45,7 @@ pub struct SourceMetadata {
 /// Supported ecosystems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Ecosystem {
+    Unknown,
     Go,
     JavaScript,
     Python,
@@ -86,10 +87,7 @@ impl Ecosystem {
     /// to pick the right distro variant.
     ///
     /// # Fallback
-    /// Unrecognized PURL prefixes currently default to `Ecosystem::Go` because
-    /// adding an `Unknown` variant would require updating every `match` on
-    /// `Ecosystem` across the codebase.  A warning is printed to stderr so
-    /// the caller is aware of the miss.
+    /// Unrecognized PURL prefixes return `Ecosystem::Unknown`.
     pub fn from_purl(purl: &str) -> Ecosystem {
         if purl.starts_with("pkg:golang/") {
             Ecosystem::Go
@@ -154,14 +152,13 @@ impl Ecosystem {
                 Ecosystem::RedHat
             }
         } else {
-            // TODO: add an Ecosystem::Unknown variant to avoid this misleading fallback.
-            eprintln!("WARNING: unrecognized PURL prefix, defaulting to Go: {}", purl);
-            Ecosystem::Go
+            Ecosystem::Unknown
         }
     }
 
     pub fn as_osv_ecosystem(&self) -> &'static str {
         match self {
+            Ecosystem::Unknown => "Unknown",
             Ecosystem::Go => "Go",
             Ecosystem::JavaScript => "npm",
             Ecosystem::Python => "PyPI",
@@ -209,6 +206,7 @@ pub struct Package {
 impl Package {
     pub fn to_purl(&self) -> String {
         match self.ecosystem {
+            Ecosystem::Unknown => format!("pkg:unknown/{}@{}", self.name, self.version),
             Ecosystem::Go => format!("pkg:golang/{}@{}", self.name, self.version),
             Ecosystem::JavaScript => {
                 // npm scoped packages: @scope/name → %40scope/name
@@ -528,59 +526,152 @@ mod tests {
 
     #[test]
     fn test_from_purl_language_ecosystems() {
-        assert_eq!(Ecosystem::from_purl("pkg:golang/github.com/x/y@v1.0"), Ecosystem::Go);
-        assert_eq!(Ecosystem::from_purl("pkg:npm/express@4.18.2"), Ecosystem::JavaScript);
-        assert_eq!(Ecosystem::from_purl("pkg:pypi/requests@2.31.0"), Ecosystem::Python);
-        assert_eq!(Ecosystem::from_purl("pkg:maven/org.apache/commons@3.14"), Ecosystem::Java);
-        assert_eq!(Ecosystem::from_purl("pkg:conan/zlib@1.2.11"), Ecosystem::Conan);
-        assert_eq!(Ecosystem::from_purl("pkg:vcpkg/zlib@1.2.11"), Ecosystem::Vcpkg);
-        assert_eq!(Ecosystem::from_purl("pkg:nuget/Newtonsoft.Json@13.0"), Ecosystem::DotNet);
-        assert_eq!(Ecosystem::from_purl("pkg:composer/monolog/monolog@3.5"), Ecosystem::Php);
-        assert_eq!(Ecosystem::from_purl("pkg:cargo/serde@1.0.193"), Ecosystem::Rust);
+        assert_eq!(
+            Ecosystem::from_purl("pkg:golang/github.com/x/y@v1.0"),
+            Ecosystem::Go
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:npm/express@4.18.2"),
+            Ecosystem::JavaScript
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:pypi/requests@2.31.0"),
+            Ecosystem::Python
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:maven/org.apache/commons@3.14"),
+            Ecosystem::Java
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:conan/zlib@1.2.11"),
+            Ecosystem::Conan
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:vcpkg/zlib@1.2.11"),
+            Ecosystem::Vcpkg
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:nuget/Newtonsoft.Json@13.0"),
+            Ecosystem::DotNet
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:composer/monolog/monolog@3.5"),
+            Ecosystem::Php
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:cargo/serde@1.0.193"),
+            Ecosystem::Rust
+        );
         assert_eq!(Ecosystem::from_purl("pkg:gem/rails@7.1.2"), Ecosystem::Ruby);
-        assert_eq!(Ecosystem::from_purl("pkg:swift/github.com/apple/swift-nio@2.62"), Ecosystem::Swift);
+        assert_eq!(
+            Ecosystem::from_purl("pkg:swift/github.com/apple/swift-nio@2.62"),
+            Ecosystem::Swift
+        );
     }
 
     #[test]
     fn test_from_purl_deb_namespaces() {
-        assert_eq!(Ecosystem::from_purl("pkg:deb/ubuntu/libc6@2.38"), Ecosystem::Ubuntu);
-        assert_eq!(Ecosystem::from_purl("pkg:deb/debian/libc6@2.36"), Ecosystem::Debian);
+        assert_eq!(
+            Ecosystem::from_purl("pkg:deb/ubuntu/libc6@2.38"),
+            Ecosystem::Ubuntu
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:deb/debian/libc6@2.36"),
+            Ecosystem::Debian
+        );
         // Unknown deb namespace defaults to Debian
-        assert_eq!(Ecosystem::from_purl("pkg:deb/other/libc6@2.36"), Ecosystem::Debian);
+        assert_eq!(
+            Ecosystem::from_purl("pkg:deb/other/libc6@2.36"),
+            Ecosystem::Debian
+        );
     }
 
     #[test]
     fn test_from_purl_apk_namespaces() {
-        assert_eq!(Ecosystem::from_purl("pkg:apk/wolfi/musl@1.2"), Ecosystem::Wolfi);
-        assert_eq!(Ecosystem::from_purl("pkg:apk/chainguard/musl@1.2"), Ecosystem::Chainguard);
-        assert_eq!(Ecosystem::from_purl("pkg:apk/alpine/musl@1.2"), Ecosystem::Alpine);
+        assert_eq!(
+            Ecosystem::from_purl("pkg:apk/wolfi/musl@1.2"),
+            Ecosystem::Wolfi
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:apk/chainguard/musl@1.2"),
+            Ecosystem::Chainguard
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:apk/alpine/musl@1.2"),
+            Ecosystem::Alpine
+        );
         // Unknown apk namespace defaults to Alpine
-        assert_eq!(Ecosystem::from_purl("pkg:apk/other/musl@1.2"), Ecosystem::Alpine);
+        assert_eq!(
+            Ecosystem::from_purl("pkg:apk/other/musl@1.2"),
+            Ecosystem::Alpine
+        );
     }
 
     #[test]
     fn test_from_purl_rpm_namespaces() {
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/redhat/glibc@2.34"), Ecosystem::RedHat);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/centos/glibc@2.34"), Ecosystem::CentOS);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/rocky/glibc@2.34"), Ecosystem::Rocky);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/almalinux/glibc@2.34"), Ecosystem::AlmaLinux);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/oraclelinux/glibc@2.34"), Ecosystem::OracleLinux);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/suse/glibc@2.34"), Ecosystem::SUSE);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/photon/glibc@2.34"), Ecosystem::Photon);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/azurelinux/glibc@2.34"), Ecosystem::AzureLinux);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/coreos/glibc@2.34"), Ecosystem::CoreOS);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/bottlerocket/glibc@2.34"), Ecosystem::Bottlerocket);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/echo/glibc@2.34"), Ecosystem::Echo);
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/minimos/glibc@2.34"), Ecosystem::MinimOS);
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/redhat/glibc@2.34"),
+            Ecosystem::RedHat
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/centos/glibc@2.34"),
+            Ecosystem::CentOS
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/rocky/glibc@2.34"),
+            Ecosystem::Rocky
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/almalinux/glibc@2.34"),
+            Ecosystem::AlmaLinux
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/oraclelinux/glibc@2.34"),
+            Ecosystem::OracleLinux
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/suse/glibc@2.34"),
+            Ecosystem::SUSE
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/photon/glibc@2.34"),
+            Ecosystem::Photon
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/azurelinux/glibc@2.34"),
+            Ecosystem::AzureLinux
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/coreos/glibc@2.34"),
+            Ecosystem::CoreOS
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/bottlerocket/glibc@2.34"),
+            Ecosystem::Bottlerocket
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/echo/glibc@2.34"),
+            Ecosystem::Echo
+        );
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/minimos/glibc@2.34"),
+            Ecosystem::MinimOS
+        );
         // Unknown rpm namespace defaults to RedHat
-        assert_eq!(Ecosystem::from_purl("pkg:rpm/unknown/glibc@2.34"), Ecosystem::RedHat);
+        assert_eq!(
+            Ecosystem::from_purl("pkg:rpm/unknown/glibc@2.34"),
+            Ecosystem::RedHat
+        );
     }
 
     #[test]
     fn test_from_purl_unknown_fallback() {
-        // Unrecognized PURL prefix falls back to Go (with a warning on stderr)
-        assert_eq!(Ecosystem::from_purl("pkg:unknown/foo@1.0"), Ecosystem::Go);
-        assert_eq!(Ecosystem::from_purl(""), Ecosystem::Go);
+        // Unrecognized PURL prefix returns Ecosystem::Unknown
+        assert_eq!(
+            Ecosystem::from_purl("pkg:unknown/foo@1.0"),
+            Ecosystem::Unknown
+        );
+        assert_eq!(Ecosystem::from_purl(""), Ecosystem::Unknown);
     }
 
     // -----------------------------------------------------------------------

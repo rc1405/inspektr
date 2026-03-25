@@ -4,7 +4,6 @@ use crate::models::Severity;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
-
 /// Parse a criterion comment like "openssl is earlier than 1:3.0.7-25.el9"
 /// into (package_name, version).
 pub fn parse_criterion_comment(comment: &str) -> Option<(String, String)> {
