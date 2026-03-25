@@ -223,7 +223,9 @@ pub fn import_osv_ecosystem(
 #[cfg(feature = "db-admin")]
 /// Duplicate RHEL affected_packages entries as CentOS entries.
 /// CentOS packages mirror RHEL, so RHEL vulnerability data applies to CentOS.
-pub fn duplicate_rhel_for_centos(store: &mut VulnStore) -> Result<usize, crate::error::DatabaseError> {
+pub fn duplicate_rhel_for_centos(
+    store: &mut VulnStore,
+) -> Result<usize, crate::error::DatabaseError> {
     eprintln!("osv: duplicating Red Hat data for CentOS...");
 
     // For each RHEL affected_package, create a CentOS entry with the ecosystem
@@ -235,7 +237,7 @@ pub fn duplicate_rhel_for_centos(store: &mut VulnStore) -> Result<usize, crate::
                 REPLACE(ecosystem, 'Red Hat', 'CentOS'),
                 package_name
          FROM affected_packages
-         WHERE ecosystem LIKE 'Red Hat:%'"
+         WHERE ecosystem LIKE 'Red Hat:%'",
     )?;
 
     // Also duplicate the affected_ranges for the new affected_packages
@@ -251,7 +253,7 @@ pub fn duplicate_rhel_for_centos(store: &mut VulnStore) -> Result<usize, crate::
          WHERE new_ap.ecosystem LIKE 'CentOS:%'
              AND NOT EXISTS (
                  SELECT 1 FROM affected_ranges WHERE affected_id = new_ap.id
-             )"
+             )",
     )?;
 
     eprintln!("osv: duplicated {} CentOS entries from Red Hat data", count);
@@ -447,30 +449,32 @@ mod tests {
     #[cfg(feature = "db-admin")]
     #[test]
     fn test_centos_proxy_from_rhel() {
-        use crate::db::store::{VulnStore, VulnRecord, AffectedPackage, AffectedRange};
+        use crate::db::store::{AffectedPackage, AffectedRange, VulnRecord, VulnStore};
         use crate::models::Severity;
 
         let mut store = VulnStore::open_in_memory().unwrap();
-        store.insert_vulnerabilities(&[VulnRecord {
-            id: "RHSA-2024-001".to_string(),
-            summary: "RHEL openssl vuln".to_string(),
-            details: String::new(),
-            severity: Severity::High,
-            published: "2024-01-01T00:00:00Z".to_string(),
-            modified: "2024-01-01T00:00:00Z".to_string(),
-            withdrawn: None,
-            affected: vec![AffectedPackage {
-                ecosystem: "Red Hat:9".to_string(),
-                package_name: "openssl".to_string(),
-                ranges: vec![AffectedRange {
-                    range_type: "ECOSYSTEM".to_string(),
-                    introduced: Some("0".to_string()),
-                    fixed: Some("1:3.0.7-25.el9_3".to_string()),
+        store
+            .insert_vulnerabilities(&[VulnRecord {
+                id: "RHSA-2024-001".to_string(),
+                summary: "RHEL openssl vuln".to_string(),
+                details: String::new(),
+                severity: Severity::High,
+                published: "2024-01-01T00:00:00Z".to_string(),
+                modified: "2024-01-01T00:00:00Z".to_string(),
+                withdrawn: None,
+                affected: vec![AffectedPackage {
+                    ecosystem: "Red Hat:9".to_string(),
+                    package_name: "openssl".to_string(),
+                    ranges: vec![AffectedRange {
+                        range_type: "ECOSYSTEM".to_string(),
+                        introduced: Some("0".to_string()),
+                        fixed: Some("1:3.0.7-25.el9_3".to_string()),
+                    }],
                 }],
-            }],
-            source: "osv".to_string(),
-            cvss_score: None,
-        }]).unwrap();
+                source: "osv".to_string(),
+                cvss_score: None,
+            }])
+            .unwrap();
 
         duplicate_rhel_for_centos(&mut store).unwrap();
 
@@ -478,6 +482,9 @@ mod tests {
         let results = store.query("CentOS:9", "openssl").unwrap();
         assert!(!results.is_empty(), "Should find CentOS entry");
         assert_eq!(results[0].id, "RHSA-2024-001");
-        assert_eq!(results[0].ranges[0].fixed, Some("1:3.0.7-25.el9_3".to_string()));
+        assert_eq!(
+            results[0].ranges[0].fixed,
+            Some("1:3.0.7-25.el9_3".to_string())
+        );
     }
 }

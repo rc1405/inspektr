@@ -1,6 +1,6 @@
+use crate::db::VulnSource;
 use crate::db::oval::parse_oval_xml;
 use crate::db::store::VulnStore;
-use crate::db::VulnSource;
 use crate::error::DatabaseError;
 
 pub struct AzureLinuxSource;

@@ -44,8 +44,8 @@ fn score_to_severity(score: f64) -> Severity {
 ///
 /// Entries with `status == "Not Affected"` or an empty `pkg` field are skipped.
 pub fn parse_photon_json(json: &str, version: &str) -> Result<Vec<VulnRecord>, DatabaseError> {
-    let entries: Vec<PhotonCveEntry> = serde_json::from_str(json)
-        .map_err(|e| DatabaseError::ImportFailed(e.to_string()))?;
+    let entries: Vec<PhotonCveEntry> =
+        serde_json::from_str(json).map_err(|e| DatabaseError::ImportFailed(e.to_string()))?;
 
     let mut records = Vec::new();
 

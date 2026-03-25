@@ -265,8 +265,8 @@ impl VulnSource for BottlerocketSource {
 
         eprintln!("bottlerocket: downloading {}...", URL);
 
-        let response = reqwest::blocking::get(URL)
-            .map_err(|e| DatabaseError::ImportFailed(e.to_string()))?;
+        let response =
+            reqwest::blocking::get(URL).map_err(|e| DatabaseError::ImportFailed(e.to_string()))?;
 
         let bytes = response
             .bytes()
