@@ -99,7 +99,6 @@ See [docs/usage.md](docs/usage.md) for detailed usage documentation.
 | Photon OS JSON | Photon OS 1.0–5.0 |
 | Azure Linux OVAL | CBL-Mariner 1.0/2.0, Azure Linux 3.0 |
 | Bottlerocket | Bottlerocket (updateinfo.xml) |
-| RHEL proxy | CentOS (uses Red Hat vulnerability data) |
 
 ## Architecture
 

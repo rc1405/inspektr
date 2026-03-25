@@ -79,9 +79,8 @@ OSV is always a full re-import (fast — bulk zip downloads).
 | **Photon OS** | JSON CVE metadata | Photon OS 1.0–5.0 |
 | **Azure Linux** | OVAL XML | CBL-Mariner 1.0/2.0, Azure Linux 3.0 |
 | **Bottlerocket** | updateinfo.xml (gzip) | Bottlerocket |
-| **CentOS** | RHEL proxy | CentOS (duplicates Red Hat vulnerability data) |
 
-CoreOS is supported for SBOM generation but has no distro-specific vulnerability feed — NVD provides partial coverage via CPE matching.
+CentOS and CoreOS are supported for SBOM generation (distro detection and package enumeration) but have no distro-specific vulnerability feed — NVD provides partial coverage via CPE matching.
 
 ## Push to Registry
 

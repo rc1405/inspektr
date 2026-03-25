@@ -106,7 +106,6 @@ for each VulnSource:
     -> Photon: download JSON CVE metadata -> VulnRecord -> insert
     -> Azure Linux: download OVAL XML from GitHub -> VulnRecord -> insert
     -> Bottlerocket: download updateinfo.xml (gzip) -> VulnRecord -> insert
-    -> CentOS: duplicated from Red Hat data after OSV import
 ```
 
 ## Feature Flags
@@ -120,11 +119,11 @@ for each VulnSource:
 
 | Module | Responsibility |
 |--------|---------------|
-| `models/` | `Ecosystem`, `Package`, `Vulnerability`, `Severity`, etc. |
+| `models/` | `Ecosystem`, `Package`, `Vulnerability`, `Severity`, etc. Key utility methods: `Ecosystem::from_purl()` (centralized PURL-to-ecosystem mapping), `Severity::parse()` (centralized severity string parser) |
 | `source/` | `Source` trait, filesystem/OCI implementations, target detection |
 | `cataloger/` | `Cataloger` trait, 12 language catalogers, OS cataloger |
 | `sbom/` | `SbomFormat` trait, CycloneDX, SPDX |
-| `db/` | `VulnSource` trait, SQLite store, importers (OSV, NVD, Oracle OVAL, Photon, Azure Linux, Bottlerocket) |
+| `db/` | `VulnSource` trait, SQLite store, importers (OSV, NVD, Oracle OVAL, Photon, Azure Linux, Bottlerocket). Key files: `store.rs`, `osv.rs`, `nvd.rs`, `oval.rs`, `oracle.rs`, `azure_linux.rs`, `photon.rs`, `bottlerocket.rs` |
 | `vuln/` | Matcher (semver + OS fallback), report types, renderers |
 | `oci/` | OCI registry client, image reference parsing, auth |
 | `cpe/` | CPE 2.3 parser, target_sw/vendor mappings for NVD |

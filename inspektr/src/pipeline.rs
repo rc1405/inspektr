@@ -11,9 +11,8 @@ use crate::cataloger::ruby::RubyCataloger;
 use crate::cataloger::rust_lang::RustCataloger;
 use crate::cataloger::swift::SwiftCataloger;
 use crate::cataloger::vcpkg::VcpkgCataloger;
-use crate::db::store::VulnStore;
 use crate::error::LookingGlassError;
-use crate::models::{FileEntry, Package, Sbom, VulnerabilityMatch};
+use crate::models::{FileEntry, Package, Sbom};
 use crate::sbom::SbomFormat;
 use crate::sbom::cyclonedx::CycloneDxFormat;
 use crate::source::Source;
@@ -21,7 +20,6 @@ use crate::source::detect::{TargetType, detect_target_type};
 use crate::source::filesystem::FilesystemSource;
 use crate::source::oci::OciImageSource;
 use crate::vuln::matcher;
-use std::path::Path;
 
 /// Build the list of catalogers to run.
 fn catalogers() -> Vec<Box<dyn Cataloger>> {
@@ -89,35 +87,6 @@ pub fn generate_sbom_bytes(target: &str, format: &str) -> Result<Vec<u8>, Lookin
     let sbom = generate_sbom(target)?;
     let formatter = select_format(format)?;
     Ok(formatter.encode(&sbom)?)
-}
-
-/// Either generate an SBOM from `target` or read one from `sbom_path`, then
-/// match all packages against the vulnerability database at `db_path`.
-pub fn scan_vulnerabilities(
-    target: Option<&str>,
-    sbom_path: Option<&str>,
-    db_path: &Path,
-) -> Result<Vec<VulnerabilityMatch>, LookingGlassError> {
-    let sbom = match (target, sbom_path) {
-        (_, Some(path)) => {
-            // Read SBOM from file and decode it.
-            let bytes = std::fs::read(path).map_err(|e| crate::error::SourceError::Io(e))?;
-            let formatter = select_format("cyclonedx")?;
-            formatter.decode(&bytes)?
-        }
-        (Some(t), None) => generate_sbom(t)?,
-        (None, None) => {
-            return Err(LookingGlassError::Source(
-                crate::error::SourceError::UnsupportedTarget {
-                    target: "(none)".to_string(),
-                },
-            ));
-        }
-    };
-
-    let db_path_str = db_path.to_string_lossy();
-    let store = VulnStore::open(&db_path_str)?;
-    Ok(matcher::match_packages(&store, &sbom.packages))
 }
 
 /// Scan for vulnerabilities and build a full report with metadata.
