@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use inspektr::models::Severity;
+use inspektr::oci::build_auth;
 use inspektr::pipeline;
 use inspektr::vuln::report;
 use std::path::PathBuf;
@@ -35,6 +36,18 @@ enum Commands {
         /// SBOM format to produce.
         #[arg(long, default_value = "cyclonedx")]
         format: String,
+
+        /// Username for OCI registry authentication.
+        #[arg(long)]
+        username: Option<String>,
+
+        /// Password for OCI registry authentication.
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Read password from stdin (for OCI registry authentication).
+        #[arg(long)]
+        password_stdin: bool,
     },
 
     /// Scan a target or SBOM for known vulnerabilities.
@@ -63,6 +76,18 @@ enum Commands {
         /// Path to the vulnerability database.
         #[arg(long)]
         db: Option<PathBuf>,
+
+        /// Username for OCI registry authentication.
+        #[arg(long)]
+        username: Option<String>,
+
+        /// Password for OCI registry authentication.
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Read password from stdin (for OCI registry authentication).
+        #[arg(long)]
+        password_stdin: bool,
     },
 
     /// Manage the local vulnerability database.
@@ -74,11 +99,23 @@ enum Commands {
 
 #[derive(Debug, Subcommand)]
 enum DbCommands {
-    /// Pull the latest pre-built vulnerability database from Docker Hub.
+    /// Pull the latest pre-built vulnerability database.
     Update {
         /// OCI image reference for the database (default: rc1405/inspektr-db:latest)
         #[arg(long, default_value = "rc1405/inspektr-db:latest")]
         registry: String,
+
+        /// Username for OCI registry authentication.
+        #[arg(long)]
+        username: Option<String>,
+
+        /// Password for OCI registry authentication.
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Read password from stdin (for OCI registry authentication).
+        #[arg(long)]
+        password_stdin: bool,
     },
 
     /// Build the vulnerability database from OSV and NVD sources.
@@ -102,6 +139,18 @@ enum DbCommands {
         /// Path to the database file to push.
         #[arg(long)]
         db: Option<PathBuf>,
+
+        /// Username for OCI registry authentication.
+        #[arg(long)]
+        username: Option<String>,
+
+        /// Password for OCI registry authentication.
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Read password from stdin (for OCI registry authentication).
+        #[arg(long)]
+        password_stdin: bool,
     },
 
     /// Delete the local vulnerability database.
@@ -120,7 +169,13 @@ fn main() -> Result<()> {
             target,
             output,
             format,
-        } => cmd_sbom(&target, output.as_deref(), &format),
+            username,
+            password,
+            password_stdin,
+        } => {
+            let auth = resolve_cli_auth(username.as_deref(), password.as_deref(), password_stdin)?;
+            cmd_sbom(&target, output.as_deref(), &format, &auth)
+        }
 
         Commands::Vuln {
             target,
@@ -129,17 +184,33 @@ fn main() -> Result<()> {
             format,
             fail_on,
             db,
-        } => cmd_vuln(
-            target.as_deref(),
-            sbom.as_deref(),
-            output.as_deref(),
-            format.as_deref(),
-            fail_on.as_deref(),
-            db.as_deref(),
-        ),
+            username,
+            password,
+            password_stdin,
+        } => {
+            let auth = resolve_cli_auth(username.as_deref(), password.as_deref(), password_stdin)?;
+            cmd_vuln(
+                target.as_deref(),
+                sbom.as_deref(),
+                output.as_deref(),
+                format.as_deref(),
+                fail_on.as_deref(),
+                db.as_deref(),
+                &auth,
+            )
+        }
 
         Commands::Db { subcommand } => match subcommand {
-            DbCommands::Update { registry } => cmd_db_update(&registry),
+            DbCommands::Update {
+                registry,
+                username,
+                password,
+                password_stdin,
+            } => {
+                let auth =
+                    resolve_cli_auth(username.as_deref(), password.as_deref(), password_stdin)?;
+                cmd_db_update(&registry, &auth)
+            }
 
             #[cfg(feature = "db-admin")]
             DbCommands::Build { ecosystem, output } => {
@@ -147,7 +218,17 @@ fn main() -> Result<()> {
             }
 
             #[cfg(feature = "db-admin")]
-            DbCommands::Push { registry, db } => cmd_db_push(&registry, db.as_deref()),
+            DbCommands::Push {
+                registry,
+                db,
+                username,
+                password,
+                password_stdin,
+            } => {
+                let auth =
+                    resolve_cli_auth(username.as_deref(), password.as_deref(), password_stdin)?;
+                cmd_db_push(&registry, db.as_deref(), &auth)
+            }
 
             DbCommands::Clean => cmd_db_clean(),
         },
@@ -155,11 +236,43 @@ fn main() -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Auth helper
+// ---------------------------------------------------------------------------
+
+/// Build registry auth from CLI flags.
+///
+/// Priority: `--password-stdin` > `--password` > anonymous.
+/// If `--username` is not provided, uses anonymous auth regardless of password.
+fn resolve_cli_auth(
+    username: Option<&str>,
+    password: Option<&str>,
+    password_stdin: bool,
+) -> Result<inspektr::oci::RegistryAuth> {
+    let resolved_password = if password_stdin {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("Failed to read password from stdin")?;
+        Some(buf.trim().to_string())
+    } else {
+        password.map(|p| p.to_string())
+    };
+
+    Ok(build_auth(username, resolved_password.as_deref()))
+}
+
+// ---------------------------------------------------------------------------
 // Command implementations
 // ---------------------------------------------------------------------------
 
-fn cmd_sbom(target: &str, output: Option<&std::path::Path>, format: &str) -> Result<()> {
-    let bytes = pipeline::generate_sbom_bytes(target, format)
+fn cmd_sbom(
+    target: &str,
+    output: Option<&std::path::Path>,
+    format: &str,
+    auth: &inspektr::oci::RegistryAuth,
+) -> Result<()> {
+    let bytes = pipeline::generate_sbom_bytes(target, format, auth)
         .with_context(|| format!("Failed to generate SBOM for '{}'", target))?;
 
     match output {
@@ -184,6 +297,7 @@ fn cmd_vuln(
     format: Option<&str>,
     fail_on: Option<&str>,
     db: Option<&std::path::Path>,
+    auth: &inspektr::oci::RegistryAuth,
 ) -> Result<()> {
     let db_path = match db {
         Some(p) => p.to_path_buf(),
@@ -191,7 +305,7 @@ fn cmd_vuln(
     };
 
     let sbom_str = sbom.map(|p| p.to_string_lossy().into_owned());
-    let scan_report = pipeline::scan_and_report(target, sbom_str.as_deref(), &db_path)
+    let scan_report = pipeline::scan_and_report(target, sbom_str.as_deref(), &db_path, auth)
         .with_context(|| "Failed to scan for vulnerabilities")?;
 
     // Determine format: explicit flag > default based on output
@@ -236,7 +350,7 @@ fn cmd_vuln(
     Ok(())
 }
 
-fn cmd_db_update(registry: &str) -> Result<()> {
+fn cmd_db_update(registry: &str, auth: &inspektr::oci::RegistryAuth) -> Result<()> {
     let db_path = pipeline::default_db_path();
 
     if let Some(parent) = db_path.parent() {
@@ -246,7 +360,7 @@ fn cmd_db_update(registry: &str) -> Result<()> {
 
     eprintln!("Pulling vulnerability database from {} …", registry);
 
-    inspektr::oci::pull::pull_artifact(registry, &db_path)
+    inspektr::oci::pull::pull_artifact(registry, &db_path, auth)
         .with_context(|| format!("Failed to pull database from '{}'", registry))?;
 
     eprintln!("Database updated at {}", db_path.display());
@@ -313,7 +427,11 @@ fn cmd_db_build(ecosystem: Option<&str>, output: Option<&std::path::Path>) -> Re
 }
 
 #[cfg(feature = "db-admin")]
-fn cmd_db_push(registry: &str, db: Option<&std::path::Path>) -> Result<()> {
+fn cmd_db_push(
+    registry: &str,
+    db: Option<&std::path::Path>,
+    auth: &inspektr::oci::RegistryAuth,
+) -> Result<()> {
     use inspektr::oci::push::push_artifact;
 
     let db_path = db
@@ -329,10 +447,15 @@ fn cmd_db_push(registry: &str, db: Option<&std::path::Path>) -> Result<()> {
 
     eprintln!("Pushing database to {}...", registry);
 
-    push_artifact(registry, &db_path, "application/vnd.inspektr.db.v1+sqlite")
-        .with_context(|| format!("Failed to push database to '{}'", registry))?;
+    push_artifact(
+        registry,
+        &db_path,
+        "application/vnd.inspektr.db.v1+sqlite",
+        auth,
+    )
+    .with_context(|| format!("Failed to push database to '{}'", registry))?;
 
-    eprintln!("Done.");
+    eprintln!("Database pushed to {}", registry);
     Ok(())
 }
 
@@ -348,7 +471,7 @@ fn parse_severity_flag(s: &str) -> Result<Severity> {
         "high" => Ok(Severity::High),
         "critical" => Ok(Severity::Critical),
         other => bail!(
-            "Invalid severity '{}'. Expected one of: none, low, medium, high, critical",
+            "Unknown severity '{}'; accepted values: none, low, medium, high, critical",
             other
         ),
     }

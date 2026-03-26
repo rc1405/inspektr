@@ -2,8 +2,17 @@ pub mod pull;
 #[cfg(feature = "db-admin")]
 pub mod push;
 
-use base64::Engine;
-use oci_distribution::secrets::RegistryAuth;
+/// Re-export RegistryAuth so consumers don't need oci_client as a direct dependency.
+pub use oci_client::secrets::RegistryAuth;
+
+/// Build a `RegistryAuth` from optional username/password.
+/// If both are provided, uses Basic auth. Otherwise, anonymous.
+pub fn build_auth(username: Option<&str>, password: Option<&str>) -> RegistryAuth {
+    match (username, password) {
+        (Some(u), Some(p)) => RegistryAuth::Basic(u.to_string(), p.to_string()),
+        _ => RegistryAuth::Anonymous,
+    }
+}
 
 /// Parsed OCI image reference.
 #[derive(Debug, Clone, PartialEq)]
@@ -111,70 +120,6 @@ impl ImageReference {
             s.contains('@')
         }
     }
-}
-
-/// Resolve authentication for a registry.
-///
-/// Checks (in order):
-/// 1. INSPEKTR_REGISTRY_TOKEN env var (as bearer token, username "token")
-/// 2. Docker config.json (~/.docker/config.json)
-/// 3. Anonymous
-pub fn resolve_auth(registry: &str) -> RegistryAuth {
-    // 1. Check env var
-    if let Ok(token) = std::env::var("INSPEKTR_REGISTRY_TOKEN") {
-        if !token.is_empty() {
-            return RegistryAuth::Basic("token".to_string(), token);
-        }
-    }
-
-    // 2. Try Docker config.json
-    if let Some(auth) = read_docker_config(registry) {
-        return auth;
-    }
-
-    // 3. Anonymous
-    RegistryAuth::Anonymous
-}
-
-/// Read Docker config.json and extract auth for the given registry.
-fn read_docker_config(registry: &str) -> Option<RegistryAuth> {
-    let home = std::env::var("HOME").ok()?;
-    let config_path = format!("{}/.docker/config.json", home);
-    let content = std::fs::read_to_string(&config_path).ok()?;
-    let config: serde_json::Value = serde_json::from_str(&content).ok()?;
-
-    let auths = config.get("auths")?.as_object()?;
-
-    // Try the registry as-is, then with https:// prefix
-    let keys_to_try = [
-        registry.to_string(),
-        format!("https://{}", registry),
-        format!("https://{}/v1/", registry),
-    ];
-
-    for key in &keys_to_try {
-        if let Some(entry) = auths.get(key) {
-            if let Some(auth_str) = entry.get("auth").and_then(|v| v.as_str()) {
-                if let Ok(decoded) = base64_decode(auth_str) {
-                    if let Some(colon_pos) = decoded.find(':') {
-                        let username = decoded[..colon_pos].to_string();
-                        let password = decoded[colon_pos + 1..].to_string();
-                        return Some(RegistryAuth::Basic(username, password));
-                    }
-                }
-            }
-        }
-    }
-
-    None
-}
-
-/// Decode a base64-encoded string using the standard engine.
-pub fn base64_decode(encoded: &str) -> Result<String, String> {
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .map_err(|e| e.to_string())?;
-    String::from_utf8(bytes).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

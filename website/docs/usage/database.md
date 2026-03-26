@@ -16,6 +16,12 @@ To pull from a custom registry:
 
 ```bash
 inspektr db update --registry your-registry.io/security/inspektr-db:latest
+
+# With authentication
+inspektr db update --registry your-registry.io/security/inspektr-db:latest --username myuser --password mytoken
+
+# Password from stdin (recommended for CI)
+echo "$TOKEN" | inspektr db update --registry your-registry.io/security/inspektr-db:latest --username myuser --password-stdin
 ```
 
 ## Build From Source Data
@@ -82,18 +88,27 @@ OSV is always a full re-import (fast — bulk zip downloads).
 
 CentOS and CoreOS are supported for SBOM generation (distro detection and package enumeration) but have no distro-specific vulnerability feed — NVD provides partial coverage via CPE matching.
 
-## Push to Registry
+## Distribute Database
 
-Share your built database with your team:
+Inspektr no longer includes a built-in push command. To distribute your built database, use [ORAS](https://oras.land/) to push it as an OCI artifact:
 
 ```bash
-inspektr db push your-registry.io/security/inspektr-db:latest
+# Push with ORAS
+oras push your-registry.io/security/inspektr-db:latest \
+  --artifact-type application/vnd.inspektr.db.v1 \
+  vuln.db:application/vnd.inspektr.db.v1+sqlite
 ```
+
+Other OCI-compatible tools (Docker, skopeo) can also be used for distribution.
 
 Team members pull with:
 
 ```bash
+# Public registry
 inspektr db update --registry your-registry.io/security/inspektr-db:latest
+
+# Private registry with authentication
+echo "$TOKEN" | inspektr db update --registry your-registry.io/security/inspektr-db:latest --username myuser --password-stdin
 ```
 
 ## Delete Database
