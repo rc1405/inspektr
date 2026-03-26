@@ -36,6 +36,9 @@ The JSON includes scan metadata (timestamp, package count, severity breakdown) s
 ```bash
 docker build -t myapp:latest .
 inspektr vuln docker.io/myapp:latest --fail-on critical
+
+# Scan a private registry image
+echo "$REGISTRY_TOKEN" | inspektr vuln --username myuser --password-stdin private.registry.io/myapp:latest --fail-on critical
 ```
 
 ## GitHub Actions Example
@@ -55,7 +58,8 @@ jobs:
           cargo install --git https://github.com/rc1405/inspektr.git inspektr_cli
 
       - name: Pull vulnerability database
-        run: inspektr db update
+        run: echo "${{ secrets.REGISTRY_TOKEN }}" | inspektr db update --username ${{ secrets.REGISTRY_USERNAME }} --password-stdin
+        # Or for public registries, simply: inspektr db update
 
       - name: Generate SBOM
         run: inspektr sbom -o sbom.json .

@@ -15,6 +15,9 @@ inspektr sbom [OPTIONS] <TARGET>
 | `<TARGET>` | Target to scan (filesystem path, binary, or OCI image reference) |
 | `--format <FORMAT>` | SBOM format: `cyclonedx` (default) or `spdx` |
 | `-o, --output <FILE>` | Write output to file instead of stdout |
+| `--username <USERNAME>` | Registry username for authentication |
+| `--password <PASSWORD>` | Registry password for authentication |
+| `--password-stdin` | Read registry password from stdin |
 
 **Examples:**
 
@@ -23,6 +26,12 @@ inspektr sbom /path/to/project
 inspektr sbom --format spdx -o sbom.json /path/to/project
 inspektr sbom docker.io/library/alpine:3.19
 inspektr sbom ~/go/bin/kubectl
+
+# Authenticate to a private registry
+inspektr sbom --username myuser --password mytoken private.registry.io/myapp:v1
+
+# Read password from stdin (recommended for CI)
+echo "$TOKEN" | inspektr sbom --username myuser --password-stdin private.registry.io/myapp:v1
 ```
 
 ### `inspektr vuln`
@@ -41,6 +50,9 @@ inspektr vuln [OPTIONS] [TARGET]
 | `-o, --output <FILE>` | Write output to file |
 | `--fail-on <SEVERITY>` | Exit non-zero if vulns at or above severity (none/low/medium/high/critical) |
 | `--db <PATH>` | Path to vulnerability database |
+| `--username <USERNAME>` | Registry username for authentication |
+| `--password <PASSWORD>` | Registry password for authentication |
+| `--password-stdin` | Read registry password from stdin |
 
 **Format defaults:**
 
@@ -56,6 +68,9 @@ inspektr vuln --format json /path/to/project
 inspektr vuln -o report.json /path/to/project
 inspektr vuln --sbom sbom.json
 inspektr vuln --fail-on high /path/to/project
+
+# Scan a private registry image with auth
+echo "$TOKEN" | inspektr vuln --username myuser --password-stdin private.registry.io/myapp:v1
 ```
 
 ### `inspektr db update`
@@ -69,6 +84,9 @@ inspektr db update [OPTIONS]
 | Option | Description |
 |--------|-------------|
 | `--registry <REF>` | OCI image reference (default: `rc1405/inspektr-db:latest`) |
+| `--username <USERNAME>` | Registry username for authentication |
+| `--password <PASSWORD>` | Registry password for authentication |
+| `--password-stdin` | Read registry password from stdin |
 
 ### `inspektr db build`
 
@@ -89,19 +107,6 @@ inspektr db build [OPTIONS]
 |----------|-------------|
 | `NVD_API_KEY` | NVD API key for faster downloads (50 req/30s vs 5 req/30s) |
 
-### `inspektr db push`
-
-Push a built database to an OCI registry. Requires `db-admin` feature.
-
-```
-inspektr db push [OPTIONS] <REGISTRY>
-```
-
-| Argument/Option | Description |
-|----------------|-------------|
-| `<REGISTRY>` | OCI registry reference |
-| `--db <PATH>` | Path to database file to push |
-
 ### `inspektr db clean`
 
 Delete the local vulnerability database.
@@ -115,7 +120,6 @@ inspektr db clean
 | Variable | Description |
 |----------|-------------|
 | `NVD_API_KEY` | NVD API key for faster database builds |
-| `INSPEKTR_REGISTRY_TOKEN` | Authentication token for OCI registries |
 | `XDG_DATA_HOME` | Override data directory (default: `~/.local/share`) |
 
 ## Target Detection

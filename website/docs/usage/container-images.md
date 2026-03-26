@@ -29,14 +29,21 @@ inspektr sbom private.registry.io/myapp:v1
 
 ## Authentication
 
-Authentication is resolved in this order:
-
-1. **`INSPEKTR_REGISTRY_TOKEN` environment variable**
-2. **Docker config.json** (`~/.docker/config.json`)
-3. **Anonymous access**
+By default, inspektr uses anonymous access (suitable for public registries).
+For private registries, provide credentials explicitly:
 
 ```bash
-INSPEKTR_REGISTRY_TOKEN=your-token inspektr sbom private.registry.io/myapp:v1
+# Inline password
+inspektr sbom --username myuser --password mytoken private.registry.io/myapp:v1
+
+# Password from stdin (recommended for CI)
+echo "$TOKEN" | inspektr sbom --username myuser --password-stdin private.registry.io/myapp:v1
+
+# AWS ECR
+aws ecr get-login-password --region us-east-1 | inspektr sbom --username AWS --password-stdin 123456789.dkr.ecr.us-east-1.amazonaws.com/myapp:latest
+
+# Google Artifact Registry
+gcloud auth print-access-token | inspektr sbom --username oauth2accesstoken --password-stdin us-docker.pkg.dev/myproject/myapp:latest
 ```
 
 ## Supported Image Formats

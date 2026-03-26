@@ -59,9 +59,15 @@ pub fn run_catalogers(files: &[FileEntry]) -> Vec<Package> {
 }
 
 /// Choose the right `Source` implementation based on the detected target type.
-fn source_from_target(target: &str) -> Result<Box<dyn Source>, LookingGlassError> {
+fn source_from_target(
+    target: &str,
+    auth: &oci_client::secrets::RegistryAuth,
+) -> Result<Box<dyn Source>, LookingGlassError> {
     match detect_target_type(target) {
-        TargetType::OciImage => Ok(Box::new(OciImageSource::new(target.to_string()))),
+        TargetType::OciImage => Ok(Box::new(OciImageSource::new(
+            target.to_string(),
+            auth.clone(),
+        ))),
         TargetType::Binary | TargetType::Filesystem => Ok(Box::new(FilesystemSource::new(
             std::path::PathBuf::from(target),
         ))),
@@ -69,8 +75,14 @@ fn source_from_target(target: &str) -> Result<Box<dyn Source>, LookingGlassError
 }
 
 /// Collect files from `target`, run all catalogers, and return an SBOM.
-pub fn generate_sbom(target: &str) -> Result<Sbom, LookingGlassError> {
-    let source = source_from_target(target)?;
+///
+/// `auth` is used for OCI image targets. Pass `RegistryAuth::Anonymous` for
+/// public images or filesystem/binary targets.
+pub fn generate_sbom(
+    target: &str,
+    auth: &oci_client::secrets::RegistryAuth,
+) -> Result<Sbom, LookingGlassError> {
+    let source = source_from_target(target, auth)?;
     let metadata = source.source_metadata();
     let files = source.files()?;
     let packages = run_catalogers(&files);
@@ -83,17 +95,25 @@ pub fn generate_sbom(target: &str) -> Result<Sbom, LookingGlassError> {
 /// Generate an SBOM and encode it in the requested format.
 ///
 /// `format` should be `"cyclonedx"` or `"spdx"`.
-pub fn generate_sbom_bytes(target: &str, format: &str) -> Result<Vec<u8>, LookingGlassError> {
-    let sbom = generate_sbom(target)?;
+pub fn generate_sbom_bytes(
+    target: &str,
+    format: &str,
+    auth: &oci_client::secrets::RegistryAuth,
+) -> Result<Vec<u8>, LookingGlassError> {
+    let sbom = generate_sbom(target, auth)?;
     let formatter = select_format(format)?;
     Ok(formatter.encode(&sbom)?)
 }
 
 /// Scan for vulnerabilities and build a full report with metadata.
+///
+/// `auth` is used for OCI image targets. Pass `RegistryAuth::Anonymous` for
+/// public images or filesystem/binary/SBOM targets.
 pub fn scan_and_report(
     target: Option<&str>,
     sbom_path: Option<&str>,
     db_path: &std::path::Path,
+    auth: &oci_client::secrets::RegistryAuth,
 ) -> Result<crate::vuln::report::ScanReport, LookingGlassError> {
     let (sbom, target_str, target_type_str) = match (target, sbom_path) {
         (_, Some(path)) => {
@@ -108,7 +128,7 @@ pub fn scan_and_report(
                 crate::source::detect::TargetType::Binary => "binary",
                 crate::source::detect::TargetType::Filesystem => "filesystem",
             };
-            let sbom = generate_sbom(t)?;
+            let sbom = generate_sbom(t, auth)?;
             (sbom, t.to_string(), tt.to_string())
         }
         (None, None) => {

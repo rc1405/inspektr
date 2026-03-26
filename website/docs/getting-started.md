@@ -14,7 +14,7 @@ The binary is at `target/release/inspektr_cli`.
 
 ### With Database Admin Features
 
-To build and push vulnerability databases from source data:
+To build vulnerability databases from source data:
 
 ```bash
 cargo build --release --features db-admin

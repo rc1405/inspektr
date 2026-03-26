@@ -4,33 +4,32 @@ use std::io::Read;
 use std::path::Path;
 
 use flate2::read::GzDecoder;
-use oci_distribution::{
+use oci_client::{
     Client, Reference,
     client::{ClientConfig, ClientProtocol},
     manifest::OciManifest,
+    secrets::RegistryAuth,
 };
 
 use crate::error::OciError;
 use crate::models::{FileContents, FileEntry};
 use crate::source::filesystem::is_binary_content;
 
-use super::resolve_auth;
-
 /// Pull an OCI artifact (e.g. a database file) and write it to `output_path`.
 ///
 /// This is used for pulling the vulnerability DB artifact stored as a single-layer
 /// OCI artifact.
-pub fn pull_artifact(reference_str: &str, output_path: &Path) -> Result<(), OciError> {
+pub fn pull_artifact(
+    reference_str: &str,
+    output_path: &Path,
+    auth: &RegistryAuth,
+) -> Result<(), OciError> {
     let reference: Reference =
         reference_str
             .parse()
-            .map_err(
-                |e: oci_distribution::ParseError| OciError::InvalidReference {
-                    reference: format!("{}: {}", reference_str, e),
-                },
-            )?;
-
-    let auth = resolve_auth(reference.registry());
+            .map_err(|e: oci_client::ParseError| OciError::InvalidReference {
+                reference: format!("{}: {}", reference_str, e),
+            })?;
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -50,7 +49,7 @@ pub fn pull_artifact(reference_str: &str, output_path: &Path) -> Result<(), OciE
         // Pull the manifest (returns OciManifest enum)
         let (manifest, _digest) =
             client
-                .pull_manifest(&reference, &auth)
+                .pull_manifest(&reference, auth)
                 .await
                 .map_err(|e| OciError::PullFailed {
                     reference: reference_str.to_string(),
@@ -102,17 +101,16 @@ pub fn pull_artifact(reference_str: &str, output_path: &Path) -> Result<(), OciE
 /// This is used for analyzing container images as a source for SBOM generation.
 /// Layers are decompressed and extracted from gzip+tar format.
 /// Whiteout files (`.wh.`) and directories are skipped.
-pub fn pull_and_extract_image(reference_str: &str) -> Result<Vec<FileEntry>, OciError> {
+pub fn pull_and_extract_image(
+    reference_str: &str,
+    auth: &RegistryAuth,
+) -> Result<Vec<FileEntry>, OciError> {
     let reference: Reference =
         reference_str
             .parse()
-            .map_err(
-                |e: oci_distribution::ParseError| OciError::InvalidReference {
-                    reference: format!("{}: {}", reference_str, e),
-                },
-            )?;
-
-    let auth = resolve_auth(reference.registry());
+            .map_err(|e: oci_client::ParseError| OciError::InvalidReference {
+                reference: format!("{}: {}", reference_str, e),
+            })?;
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -131,20 +129,20 @@ pub fn pull_and_extract_image(reference_str: &str) -> Result<Vec<FileEntry>, Oci
 
         let accepted_media_types = vec![
             // Manifest types
-            oci_distribution::manifest::IMAGE_MANIFEST_MEDIA_TYPE,
-            oci_distribution::manifest::IMAGE_MANIFEST_LIST_MEDIA_TYPE,
-            oci_distribution::manifest::OCI_IMAGE_MEDIA_TYPE,
-            oci_distribution::manifest::OCI_IMAGE_INDEX_MEDIA_TYPE,
+            oci_client::manifest::IMAGE_MANIFEST_MEDIA_TYPE,
+            oci_client::manifest::IMAGE_MANIFEST_LIST_MEDIA_TYPE,
+            oci_client::manifest::OCI_IMAGE_MEDIA_TYPE,
+            oci_client::manifest::OCI_IMAGE_INDEX_MEDIA_TYPE,
             // OCI layer types
-            oci_distribution::manifest::IMAGE_LAYER_GZIP_MEDIA_TYPE,
-            oci_distribution::manifest::IMAGE_LAYER_MEDIA_TYPE,
+            oci_client::manifest::IMAGE_LAYER_GZIP_MEDIA_TYPE,
+            oci_client::manifest::IMAGE_LAYER_MEDIA_TYPE,
             // Docker layer types (used by Docker Hub images)
-            oci_distribution::manifest::IMAGE_DOCKER_LAYER_GZIP_MEDIA_TYPE,
-            oci_distribution::manifest::IMAGE_DOCKER_LAYER_TAR_MEDIA_TYPE,
+            oci_client::manifest::IMAGE_DOCKER_LAYER_GZIP_MEDIA_TYPE,
+            oci_client::manifest::IMAGE_DOCKER_LAYER_TAR_MEDIA_TYPE,
         ];
 
         let image_data = client
-            .pull(&reference, &auth, accepted_media_types)
+            .pull(&reference, auth, accepted_media_types)
             .await
             .map_err(|e| OciError::PullFailed {
                 reference: reference_str.to_string(),

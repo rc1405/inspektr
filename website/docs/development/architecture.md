@@ -113,7 +113,7 @@ for each VulnSource:
 | Feature | What it enables |
 |---------|----------------|
 | `default` | SBOM generation, vulnerability scanning, database pull |
-| `db-admin` | `db build`, `db push` — all vulnerability importers, OCI push. Adds `quick-xml`, `bzip2`, `zip` dependencies. |
+| `db-admin` | `db build` — all vulnerability importers. Adds `quick-xml`, `bzip2`, `zip` dependencies. Database distribution uses external tools (ORAS, Docker, skopeo). |
 
 ## Module Map
 
@@ -125,7 +125,7 @@ for each VulnSource:
 | `sbom/` | `SbomFormat` trait, CycloneDX, SPDX |
 | `db/` | `VulnSource` trait, SQLite store, importers (OSV, NVD, Oracle OVAL, Photon, Azure Linux, Bottlerocket). Key files: `store.rs`, `osv.rs`, `nvd.rs`, `oval.rs`, `oracle.rs`, `azure_linux.rs`, `photon.rs`, `bottlerocket.rs` |
 | `vuln/` | Matcher (semver + OS fallback), report types, renderers |
-| `oci/` | OCI registry client, image reference parsing, auth |
+| `oci/` | OCI registry client, image reference parsing, explicit auth (username/password) |
 | `cpe/` | CPE 2.3 parser, target_sw/vendor mappings for NVD |
 | `pipeline` | Orchestration — ties layers together |
 | `error` | Error types (thiserror) |
