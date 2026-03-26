@@ -18,10 +18,10 @@ serde_json = "1"
 semver = { version = "1", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
-zip = { version = "2", optional = true }
+zip = { version = "8", optional = true }
 quick-xml = { version = "0.37", features = ["serialize"], optional = true }
 bzip2 = { version = "0.5", optional = true }
-reqwest = { version = "0.12", features = ["blocking"] }
+reqwest = { version = "0.12", features = ["blocking", "gzip"] }
 oci-client = "0.16"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 flate2 = "1"

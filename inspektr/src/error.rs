@@ -71,9 +71,7 @@ pub enum OciError {
     #[error("Failed to push {reference}: {reason}")]
     PushFailed { reference: String, reason: String },
 
-    #[error(
-        "Authentication failed for {registry}. Set INSPEKTR_REGISTRY_TOKEN or run `docker login`."
-    )]
+    #[error("Authentication failed for {registry}. Provide --username and --password flags.")]
     AuthFailed { registry: String },
 
     #[error("Invalid OCI reference: {reference}")]

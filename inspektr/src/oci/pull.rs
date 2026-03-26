@@ -82,8 +82,23 @@ pub fn pull_artifact(
                 reason: e.to_string(),
             })?;
 
+        // Decompress if gzipped (detected by gzip magic bytes 1f 8b)
+        let output_data = if blob_data.len() >= 2 && blob_data[0] == 0x1f && blob_data[1] == 0x8b {
+            let mut decoder = GzDecoder::new(&blob_data[..]);
+            let mut decompressed = Vec::new();
+            decoder
+                .read_to_end(&mut decompressed)
+                .map_err(|e| OciError::PullFailed {
+                    reference: reference_str.to_string(),
+                    reason: format!("failed to decompress artifact: {}", e),
+                })?;
+            decompressed
+        } else {
+            blob_data
+        };
+
         // Write to output path
-        std::fs::write(output_path, &blob_data).map_err(|e| OciError::PullFailed {
+        std::fs::write(output_path, &output_data).map_err(|e| OciError::PullFailed {
             reference: reference_str.to_string(),
             reason: format!(
                 "failed to write artifact to {}: {}",

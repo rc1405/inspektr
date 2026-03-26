@@ -140,6 +140,14 @@ pub fn scan_and_report(
         }
     };
 
+    if !db_path.exists() {
+        return Err(LookingGlassError::Database(
+            crate::error::DatabaseError::NotFound {
+                path: db_path.display().to_string(),
+            },
+        ));
+    }
+
     let db_str = db_path.to_string_lossy();
     let store = crate::db::store::VulnStore::open(&db_str)?;
     store.check_staleness();
