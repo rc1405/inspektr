@@ -128,6 +128,10 @@ enum DbCommands {
         /// Write the resulting database to this path.
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Continue building even if a source fails (default: fail on first error).
+        #[arg(long)]
+        skip_failed: bool,
     },
 
     /// Push a built database to an OCI registry.
@@ -213,9 +217,11 @@ fn main() -> Result<()> {
             }
 
             #[cfg(feature = "db-admin")]
-            DbCommands::Build { ecosystem, output } => {
-                cmd_db_build(ecosystem.as_deref(), output.as_deref())
-            }
+            DbCommands::Build {
+                ecosystem,
+                output,
+                skip_failed,
+            } => cmd_db_build(ecosystem.as_deref(), output.as_deref(), skip_failed),
 
             #[cfg(feature = "db-admin")]
             DbCommands::Push {
@@ -382,7 +388,11 @@ fn cmd_db_clean() -> Result<()> {
 }
 
 #[cfg(feature = "db-admin")]
-fn cmd_db_build(ecosystem: Option<&str>, output: Option<&std::path::Path>) -> Result<()> {
+fn cmd_db_build(
+    ecosystem: Option<&str>,
+    output: Option<&std::path::Path>,
+    skip_failed: bool,
+) -> Result<()> {
     use inspektr::db::store::VulnStore;
     use inspektr::db::{normalize_ecosystem, vuln_sources};
 
@@ -415,11 +425,32 @@ fn cmd_db_build(ecosystem: Option<&str>, output: Option<&std::path::Path>) -> Re
     let mut store = VulnStore::open(&db_str).context("Failed to open vulnerability database")?;
 
     let mut total = 0;
+    let mut failures: Vec<String> = Vec::new();
     for source in vuln_sources() {
         match source.import(&mut store, ecosystem) {
             Ok(count) => total += count,
-            Err(e) => eprintln!("Warning: {} import failed: {}", source.name(), e),
+            Err(e) => {
+                let msg = format!("{}: {}", source.name(), e);
+                if skip_failed {
+                    eprintln!("Warning: {} import failed: {}", source.name(), e);
+                } else {
+                    eprintln!("Error: {} import failed: {}", source.name(), e);
+                    failures.push(msg);
+                }
+            }
         }
+    }
+
+    if !failures.is_empty() {
+        eprintln!(
+            "Built database with {} vulnerabilities before failure.",
+            total
+        );
+        bail!(
+            "Database build failed. {} source(s) failed:\n  {}",
+            failures.len(),
+            failures.join("\n  ")
+        );
     }
 
     eprintln!("Built database with {} total vulnerabilities.", total);
