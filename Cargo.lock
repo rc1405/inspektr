@@ -1141,7 +1141,7 @@ dependencies = [
 
 [[package]]
 name = "inspektr"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "base64",
  "bzip2 0.5.2",
@@ -1165,7 +1165,7 @@ dependencies = [
 
 [[package]]
 name = "inspektr_cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "clap",

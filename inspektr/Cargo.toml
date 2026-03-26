@@ -1,6 +1,6 @@
 [package]
 name = "inspektr"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 license-file = "../LICENSE"
 description = "A software composition analysis (SCA) tool for generating Software Bills of Materials (SBOM) and scanning for known vulnerabilities."
