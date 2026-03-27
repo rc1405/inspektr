@@ -1,6 +1,6 @@
 [package]
 name = "inspektr_cli"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 license-file = "../LICENSE"
 description = "A software composition analysis (SCA) tool for generating Software Bills of Materials (SBOM) and scanning for known vulnerabilities."
@@ -11,6 +11,6 @@ default = []
 db-admin = ["inspektr/db-admin"]
 
 [dependencies]
-inspektr = { path = "../inspektr", version = "0.1.5" }
+inspektr = { path = "../inspektr", version = "0.1.6" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
