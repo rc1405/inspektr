@@ -297,9 +297,9 @@ impl NvdClient {
         }
     }
 
-    /// Maximum number of retries when NVD returns 429 Too Many Requests.
+    /// Maximum number of retries for transient errors (429, body decode, parse).
     const MAX_RETRIES: u32 = 5;
-    /// Base backoff duration for 429 retries (doubles each attempt).
+    /// Base backoff duration in seconds (doubles each attempt).
     const RETRY_BACKOFF_SECS: u64 = 30;
 
     fn fetch_page(
@@ -307,6 +307,8 @@ impl NvdClient {
         start_index: u32,
         last_mod_start: Option<&str>,
     ) -> Result<NvdResponse, DatabaseError> {
+        let mut last_error = String::new();
+
         for attempt in 0..Self::MAX_RETRIES {
             self.rate_limiter.wait_if_needed();
 
@@ -320,7 +322,6 @@ impl NvdClient {
 
             if let Some(start_date) = last_mod_start {
                 query_params.push(("lastModStartDate".to_string(), start_date.to_string()));
-                // NVD requires lastModEndDate when lastModStartDate is set (max 120 day range)
                 query_params.push(("lastModEndDate".to_string(), now_iso8601()));
             }
 
@@ -330,10 +331,17 @@ impl NvdClient {
                 request = request.header("apiKey", key);
             }
 
-            let response = request.send().map_err(|e| {
-                DatabaseError::ImportFailed(format!("NVD API request failed: {}", e))
-            })?;
+            // Send request — retry on network errors
+            let response = match request.send() {
+                Ok(r) => r,
+                Err(e) => {
+                    last_error = format!("NVD API request failed: {}", e);
+                    retry_with_backoff(attempt, &last_error);
+                    continue;
+                }
+            };
 
+            // 403 is a permanent error — don't retry
             if response.status() == reqwest::StatusCode::FORBIDDEN {
                 return Err(DatabaseError::ImportFailed(
                     "NVD API key rejected. Check NVD_API_KEY or unset it to use anonymous access."
@@ -341,46 +349,51 @@ impl NvdClient {
                 ));
             }
 
+            // 429 — rate limited, retry
             if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                let wait_secs = Self::RETRY_BACKOFF_SECS * 2u64.pow(attempt);
-                eprintln!(
-                    "nvd: rate limited (429), waiting {}s before retry ({}/{})...",
-                    wait_secs,
-                    attempt + 1,
-                    Self::MAX_RETRIES
-                );
-                std::thread::sleep(Duration::from_secs(wait_secs));
+                last_error = "rate limited (429)".to_string();
+                retry_with_backoff(attempt, &last_error);
                 continue;
             }
 
+            // Other non-success HTTP status — retry (could be 500, 503, etc.)
             if !response.status().is_success() {
-                return Err(DatabaseError::ImportFailed(format!(
-                    "NVD API returned HTTP {}",
-                    response.status()
-                )));
+                last_error = format!("NVD API returned HTTP {}", response.status());
+                retry_with_backoff(attempt, &last_error);
+                continue;
             }
 
-            let text = response.text().map_err(|e| {
-                DatabaseError::ImportFailed(format!("Failed to read NVD response body: {}", e))
-            })?;
+            // Read response body — retry on decode errors
+            let text = match response.text() {
+                Ok(t) => t,
+                Err(e) => {
+                    last_error = format!("Failed to read NVD response body: {}", e);
+                    retry_with_backoff(attempt, &last_error);
+                    continue;
+                }
+            };
 
-            return serde_json::from_str::<NvdResponse>(&text).map_err(|e| {
-                // Include first 200 chars of response for debugging
-                let preview = if text.len() > 200 {
-                    &text[..200]
-                } else {
-                    &text
-                };
-                DatabaseError::ImportFailed(format!(
-                    "Failed to parse NVD response: {}. Response preview: {}",
-                    e, preview
-                ))
-            });
+            // Parse JSON — retry on parse errors (could be truncated response)
+            match serde_json::from_str::<NvdResponse>(&text) {
+                Ok(parsed) => return Ok(parsed),
+                Err(e) => {
+                    let preview = if text.len() > 200 {
+                        &text[..200]
+                    } else {
+                        &text
+                    };
+                    last_error =
+                        format!("Failed to parse NVD response: {}. Preview: {}", e, preview);
+                    retry_with_backoff(attempt, &last_error);
+                    continue;
+                }
+            }
         }
 
         Err(DatabaseError::ImportFailed(format!(
-            "NVD API rate limit exceeded after {} retries",
-            Self::MAX_RETRIES
+            "NVD API failed after {} retries: {}",
+            Self::MAX_RETRIES,
+            last_error
         )))
     }
 
@@ -476,6 +489,18 @@ impl VulnSource for NvdSource {
 /// Current UTC time as ISO 8601 string (for NVD API date parameters).
 fn now_iso8601() -> String {
     crate::sbom::spdx::chrono_now()
+}
+
+/// Log a retry message and sleep with exponential backoff.
+fn retry_with_backoff(attempt: u32, reason: &str) {
+    let wait_secs = 30u64 * 2u64.pow(attempt);
+    eprintln!(
+        "nvd: {} — waiting {}s before retry ({}/5)...",
+        reason,
+        wait_secs,
+        attempt + 1,
+    );
+    std::thread::sleep(Duration::from_secs(wait_secs));
 }
 
 // ---------------------------------------------------------------------------
