@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6](https://github.com/rc1405/inspektr/compare/inspektr-v0.1.5...inspektr-v0.1.6) - 2026-03-27
+
+### Fixed
+
+- retry for nvd api call failures
+
 ## [0.1.5](https://github.com/rc1405/inspektr/compare/inspektr-v0.1.4...inspektr-v0.1.5) - 2026-03-26
 
 ### Added
