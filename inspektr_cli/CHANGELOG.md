@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7](https://github.com/rc1405/inspektr/compare/inspektr_cli-v0.1.6...inspektr_cli-v0.1.7) - 2026-03-28
+
+### Added
+
+- shrinking db size
+
+### Other
+
+- fmt
+- smaller size
+
 ## [0.1.5](https://github.com/rc1405/inspektr/compare/inspektr_cli-v0.1.4...inspektr_cli-v0.1.5) - 2026-03-26
 
 ### Added
