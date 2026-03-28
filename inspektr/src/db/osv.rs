@@ -95,7 +95,6 @@ pub fn parse_osv_entry(json: &str) -> Result<VulnRecord, serde_json::Error> {
     Ok(VulnRecord {
         id: entry.id,
         summary: entry.summary,
-        details: entry.details,
         severity,
         published: entry.published,
         modified: entry.modified,
@@ -227,10 +226,6 @@ impl VulnSource for OsvSource {
         store: &mut VulnStore,
         ecosystem: Option<&str>,
     ) -> Result<usize, crate::error::DatabaseError> {
-        // Clear existing OSV data for clean re-import
-        eprintln!("osv: clearing previous data...");
-        store.clear_source("osv")?;
-
         let total = match ecosystem {
             Some(eco) => {
                 eprintln!("osv: importing {}...", eco);
@@ -249,9 +244,6 @@ impl VulnSource for OsvSource {
                 total
             }
         };
-
-        // Record the update timestamp
-        store.set_last_updated("osv", &crate::sbom::spdx::chrono_now())?;
 
         Ok(total)
     }

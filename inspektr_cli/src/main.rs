@@ -419,10 +419,21 @@ fn cmd_db_build(
         None => None,
     };
 
+    // Always build from scratch — delete any existing database file.
+    if db_path.exists() {
+        std::fs::remove_file(&db_path).with_context(|| {
+            format!(
+                "Failed to remove existing database at '{}'",
+                db_path.display()
+            )
+        })?;
+    }
+
     eprintln!("Building vulnerability database at {} …", db_path.display());
 
     let db_str = db_path.to_string_lossy();
-    let mut store = VulnStore::open(&db_str).context("Failed to open vulnerability database")?;
+    let mut store =
+        VulnStore::create(&db_str).context("Failed to create vulnerability database")?;
 
     let mut total = 0;
     let mut failures: Vec<String> = Vec::new();
@@ -453,6 +464,8 @@ fn cmd_db_build(
         );
     }
 
+    store.save().context("Failed to save database")?;
+
     eprintln!("Built database with {} total vulnerabilities.", total);
     Ok(())
 }
@@ -481,7 +494,7 @@ fn cmd_db_push(
     push_artifact(
         registry,
         &db_path,
-        "application/vnd.inspektr.db.v1+sqlite",
+        "application/vnd.inspektr.db.v1+bincode",
         auth,
     )
     .with_context(|| format!("Failed to push database to '{}'", registry))?;

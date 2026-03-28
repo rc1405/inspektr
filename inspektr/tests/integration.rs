@@ -66,7 +66,6 @@ fn test_full_pipeline_go_filesystem() {
     let record = VulnRecord {
         id: "GO-2024-TEST-0001".to_string(),
         summary: "Test vulnerability in vuln-pkg".to_string(),
-        details: "A crafted input can trigger arbitrary code execution.".to_string(),
         severity: Severity::High,
         published: "2024-01-01T00:00:00Z".to_string(),
         modified: "2024-02-01T00:00:00Z".to_string(),

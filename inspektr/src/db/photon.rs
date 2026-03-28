@@ -71,7 +71,6 @@ pub fn parse_photon_json(json: &str, version: &str) -> Result<Vec<VulnRecord>, D
         let record = VulnRecord {
             id: entry.cve_id.clone(),
             summary: String::new(),
-            details: String::new(),
             severity,
             published: String::new(),
             modified: String::new(),
@@ -125,9 +124,6 @@ impl VulnSource for PhotonSource {
             }
         }
 
-        eprintln!("photon: clearing previous data...");
-        store.clear_source("photon")?;
-
         const VERSIONS: &[&str] = &["1.0", "2.0", "3.0", "4.0", "5.0"];
 
         let mut total = 0;
@@ -153,8 +149,6 @@ impl VulnSource for PhotonSource {
             eprintln!("photon: Photon OS:{} — {} vulnerabilities", version, count);
             total += count;
         }
-
-        store.set_last_updated("photon", &crate::sbom::spdx::chrono_now())?;
 
         Ok(total)
     }

@@ -1,14 +1,18 @@
 use crate::error::DatabaseError;
 use crate::models::Severity;
-use rusqlite::{Connection, params};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::Path;
+
+// ---------------------------------------------------------------------------
+// Public types (unchanged API)
+// ---------------------------------------------------------------------------
 
 /// A vulnerability record to be stored in the database.
 #[derive(Debug, Clone)]
 pub struct VulnRecord {
     pub id: String,
     pub summary: String,
-    pub details: String,
     pub severity: Severity,
     pub published: String,
     pub modified: String,
@@ -39,7 +43,6 @@ pub struct AffectedRange {
 pub struct VulnQueryResult {
     pub id: String,
     pub summary: String,
-    pub details: String,
     pub severity: Severity,
     pub published: String,
     pub modified: String,
@@ -48,462 +51,262 @@ pub struct VulnQueryResult {
     pub ranges: Vec<AffectedRange>,
 }
 
-/// Wraps a SQLite connection for vulnerability storage and retrieval.
+// ---------------------------------------------------------------------------
+// Internal compact types (serialized to disk)
+// ---------------------------------------------------------------------------
+
+const SCHEMA_VERSION: u32 = 6;
+
+#[derive(Serialize, Deserialize)]
+struct VulnDatabase {
+    version: u32,
+    data: HashMap<String, Vec<CompactVuln>>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct CompactVuln {
+    id: String,
+    summary: String,
+    severity: u8,
+    cvss_score: Option<f32>,
+    source: String,
+    published: String,
+    ranges: Vec<CompactRange>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct CompactRange {
+    range_type: u8,
+    introduced: Option<String>,
+    fixed: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Key / encoding helpers
+// ---------------------------------------------------------------------------
+
+fn make_key(ecosystem: &str, package_name: &str) -> String {
+    format!("{}\0{}", ecosystem, package_name)
+}
+
+fn severity_to_u8(s: Severity) -> u8 {
+    match s {
+        Severity::None => 0,
+        Severity::Low => 1,
+        Severity::Medium => 2,
+        Severity::High => 3,
+        Severity::Critical => 4,
+    }
+}
+
+fn severity_from_u8(v: u8) -> Severity {
+    match v {
+        1 => Severity::Low,
+        2 => Severity::Medium,
+        3 => Severity::High,
+        4 => Severity::Critical,
+        _ => Severity::None,
+    }
+}
+
+fn range_type_to_u8(s: &str) -> u8 {
+    match s {
+        "SEMVER" => 1,
+        "GIT" => 2,
+        _ => 0,
+    }
+}
+
+fn range_type_from_u8(v: u8) -> String {
+    match v {
+        1 => "SEMVER".to_string(),
+        2 => "GIT".to_string(),
+        _ => "ECOSYSTEM".to_string(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// VulnStore
+// ---------------------------------------------------------------------------
+
+/// Binary vulnerability database backed by bincode + LZ4 compression.
 pub struct VulnStore {
-    conn: Connection,
+    db: VulnDatabase,
+    path: Option<String>,
 }
 
 impl VulnStore {
-    /// Current schema version. Increment this when the schema changes.
-    const SCHEMA_VERSION: u32 = 2;
-
-    /// Open (or create) a database at the given path.
-    /// If the existing database has an older schema version, it is deleted
-    /// and recreated with the current schema.
+    /// Open an existing database file. Returns error if file doesn't exist.
     pub fn open(path: &str) -> Result<Self, DatabaseError> {
-        // Check for schema migration before opening
-        if std::path::Path::new(path).exists() {
-            if let Err(reason) = Self::check_schema_version(path) {
-                eprintln!("Migrating database: {}. Rebuilding...", reason);
-                std::fs::remove_file(path).map_err(|e| {
-                    DatabaseError::Sqlite(format!("Failed to remove old database: {}", e))
-                })?;
-            }
+        if !Path::new(path).exists() {
+            return Err(DatabaseError::NotFound {
+                path: path.to_string(),
+            });
         }
 
-        let conn = Connection::open(path).map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-        let mut store = Self { conn };
-        store.create_tables()?;
-        Ok(store)
+        let data = std::fs::read(path)
+            .map_err(|e| DatabaseError::Storage(format!("failed to read {}: {}", path, e)))?;
+
+        // Decompress LZ4
+        let decompressed = lz4_flex::decompress_size_prepended(&data)
+            .map_err(|e| DatabaseError::Storage(format!("failed to decompress: {}", e)))?;
+
+        // Deserialize bincode
+        let db: VulnDatabase = bincode::deserialize(&decompressed)
+            .map_err(|e| DatabaseError::Storage(format!("failed to deserialize: {}", e)))?;
+
+        if db.version != SCHEMA_VERSION {
+            return Err(DatabaseError::Storage(format!(
+                "database version {} != expected {}. Rebuild with `inspektr db build`.",
+                db.version, SCHEMA_VERSION
+            )));
+        }
+
+        Ok(Self {
+            db,
+            path: Some(path.to_string()),
+        })
+    }
+
+    /// Create a new empty database (for building).
+    pub fn create(path: &str) -> Result<Self, DatabaseError> {
+        Ok(Self {
+            db: VulnDatabase {
+                version: SCHEMA_VERSION,
+                data: HashMap::new(),
+            },
+            path: Some(path.to_string()),
+        })
     }
 
     /// Open an in-memory database (useful for tests).
     pub fn open_in_memory() -> Result<Self, DatabaseError> {
-        let conn =
-            Connection::open_in_memory().map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-        let mut store = Self { conn };
-        store.create_tables()?;
-        Ok(store)
+        Ok(Self {
+            db: VulnDatabase {
+                version: SCHEMA_VERSION,
+                data: HashMap::new(),
+            },
+            path: None,
+        })
     }
 
-    /// Check if an existing database has a compatible schema version.
-    /// Returns Ok(()) if compatible, Err(reason) if migration is needed.
-    fn check_schema_version(path: &str) -> Result<(), String> {
-        let conn = Connection::open(path).map_err(|e| format!("cannot open: {}", e))?;
-
-        // Check if metadata table exists
-        let has_metadata: bool = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='metadata'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0)
-            > 0;
-
-        if !has_metadata {
-            return Err("no metadata table (pre-v2 schema)".to_string());
-        }
-
-        let version: u32 = conn
-            .query_row(
-                "SELECT value FROM metadata WHERE key = 'schema_version'",
-                [],
-                |row| {
-                    let v: String = row.get(0)?;
-                    Ok(v.parse::<u32>().unwrap_or(0))
-                },
-            )
-            .unwrap_or(0);
-
-        if version < Self::SCHEMA_VERSION {
-            return Err(format!(
-                "schema version {} is older than current version {}",
-                version,
-                Self::SCHEMA_VERSION
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Create all required tables and indexes if they do not already exist,
-    /// and store the current schema version.
-    pub fn create_tables(&mut self) -> Result<(), DatabaseError> {
-        self.conn
-            .execute_batch(
-                "
-                CREATE TABLE IF NOT EXISTS vulnerabilities (
-                    id          TEXT NOT NULL,
-                    summary     TEXT NOT NULL,
-                    details     TEXT NOT NULL,
-                    severity    TEXT NOT NULL,
-                    published   TEXT NOT NULL,
-                    modified    TEXT NOT NULL,
-                    withdrawn   TEXT,
-                    source      TEXT NOT NULL DEFAULT 'osv',
-                    cvss_score  REAL,
-                    PRIMARY KEY (id, source)
-                );
-
-                CREATE TABLE IF NOT EXISTS affected_packages (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    vuln_id         TEXT NOT NULL,
-                    vuln_source     TEXT NOT NULL DEFAULT 'osv',
-                    ecosystem       TEXT NOT NULL,
-                    package_name    TEXT NOT NULL
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_affected_packages_lookup
-                    ON affected_packages(ecosystem, package_name);
-
-                CREATE TABLE IF NOT EXISTS affected_ranges (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    affected_id     INTEGER NOT NULL REFERENCES affected_packages(id),
-                    range_type      TEXT NOT NULL,
-                    introduced      TEXT,
-                    fixed           TEXT
-                );
-
-                CREATE TABLE IF NOT EXISTS metadata (
-                    key   TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                ",
-            )
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-
-        // Store the schema version
-        self.set_metadata("schema_version", &Self::SCHEMA_VERSION.to_string())
-    }
-
-    /// Get a metadata value by key.
-    pub fn get_metadata(&self, key: &str) -> Option<String> {
-        self.conn
-            .query_row(
-                "SELECT value FROM metadata WHERE key = ?1",
-                params![key],
-                |row| row.get(0),
-            )
-            .ok()
-    }
-
-    /// Set a metadata value (upsert).
-    pub fn set_metadata(&mut self, key: &str, value: &str) -> Result<(), DatabaseError> {
-        self.conn
-            .execute(
-                "INSERT OR REPLACE INTO metadata (key, value) VALUES (?1, ?2)",
-                params![key, value],
-            )
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-        Ok(())
-    }
-
-    /// Get the last update timestamp for a given source (e.g., "osv", "nvd").
-    /// Returns an ISO 8601 string or None if never updated.
-    pub fn last_updated(&self, source: &str) -> Option<String> {
-        self.get_metadata(&format!("last_updated_{}", source))
-    }
-
-    /// Set the last update timestamp for a given source.
-    pub fn set_last_updated(&mut self, source: &str, timestamp: &str) -> Result<(), DatabaseError> {
-        self.set_metadata(&format!("last_updated_{}", source), timestamp)
-    }
-
-    /// Check database staleness and print warnings to stderr.
-    /// Returns true if the database is usable (even if stale).
-    pub fn check_staleness(&self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        // Check the most recent update across all sources
-        let mut newest_update: Option<u64> = None;
-        for source in &["osv", "nvd"] {
-            if let Some(ts) = self.last_updated(source) {
-                if let Ok(epoch) = parse_iso8601_to_epoch(&ts) {
-                    newest_update = Some(newest_update.map_or(epoch, |n: u64| n.max(epoch)));
-                }
-            }
-        }
-
-        let Some(last) = newest_update else {
-            eprintln!(
-                "WARNING: Vulnerability database has never been updated. Run `inspektr db update` or `inspektr db build`."
-            );
-            return;
-        };
-
-        let age_days = (now.saturating_sub(last)) / 86400;
-
-        if age_days > 30 {
-            eprintln!(
-                "ERROR: Vulnerability database is {} days old. Results may be inaccurate. Run `inspektr db update` or `inspektr db build`.",
-                age_days
-            );
-        } else if age_days > 7 {
-            eprintln!(
-                "WARNING: Vulnerability database is {} days old. Consider running `inspektr db update` or `inspektr db build`.",
-                age_days
-            );
-        }
-    }
-
-    /// Return the total number of vulnerability records stored.
-    pub fn vulnerability_count(&self) -> usize {
-        self.conn
-            .query_row("SELECT COUNT(*) FROM vulnerabilities", [], |row| {
-                row.get::<_, i64>(0)
-            })
-            .unwrap_or(0) as usize
-    }
-
-    /// Delete all data for a given source (e.g., "osv" or "nvd").
-    /// Call this before a full re-import to avoid per-record delete overhead.
-    pub fn clear_source(&mut self, source: &str) -> Result<(), DatabaseError> {
-        let tx = self
-            .conn
-            .unchecked_transaction()
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-
-        tx.execute(
-            "DELETE FROM affected_ranges WHERE affected_id IN
-             (SELECT id FROM affected_packages WHERE vuln_source = ?1)",
-            params![source],
-        )
-        .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-
-        tx.execute(
-            "DELETE FROM affected_packages WHERE vuln_source = ?1",
-            params![source],
-        )
-        .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-
-        tx.execute(
-            "DELETE FROM vulnerabilities WHERE source = ?1",
-            params![source],
-        )
-        .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-
-        tx.commit()
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
-    }
-
-    /// Insert a slice of vulnerability records in a single transaction.
-    /// For best performance on full imports, call `clear_source()` first
-    /// to avoid per-record cleanup overhead.
+    /// Insert vulnerability records. Aggregates into the HashMap by
+    /// (ecosystem, package_name). Withdrawn records are skipped.
     pub fn insert_vulnerabilities(&mut self, records: &[VulnRecord]) -> Result<(), DatabaseError> {
-        // SAFETY: we hold &mut self so no concurrent access is possible.
-        let tx = self
-            .conn
-            .unchecked_transaction()
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-
         for record in records {
-            tx.execute(
-                "INSERT OR REPLACE INTO vulnerabilities
-                 (id, summary, details, severity, published, modified, withdrawn, source, cvss_score)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                params![
-                    record.id,
-                    record.summary,
-                    record.details,
-                    format!("{:?}", record.severity),
-                    record.published,
-                    record.modified,
-                    record.withdrawn,
-                    record.source,
-                    record.cvss_score,
-                ],
-            )
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+            if record.withdrawn.is_some() {
+                continue;
+            }
+
+            let compact = CompactVuln {
+                id: record.id.clone(),
+                summary: record.summary.clone(),
+                severity: severity_to_u8(record.severity),
+                cvss_score: record.cvss_score.map(|v| v as f32),
+                source: record.source.clone(),
+                published: record.published.clone(),
+                ranges: Vec::new(), // filled per affected package below
+            };
 
             for pkg in &record.affected {
-                tx.execute(
-                    "INSERT INTO affected_packages (vuln_id, vuln_source, ecosystem, package_name)
-                     VALUES (?1, ?2, ?3, ?4)",
-                    params![record.id, record.source, pkg.ecosystem, pkg.package_name],
-                )
-                .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
+                let key = make_key(&pkg.ecosystem, &pkg.package_name);
+                let mut entry = compact.clone();
+                entry.ranges = pkg
+                    .ranges
+                    .iter()
+                    .map(|r| CompactRange {
+                        range_type: range_type_to_u8(&r.range_type),
+                        introduced: r.introduced.clone(),
+                        fixed: r.fixed.clone(),
+                    })
+                    .collect();
 
-                let affected_id = tx.last_insert_rowid();
-
-                for range in &pkg.ranges {
-                    tx.execute(
-                        "INSERT INTO affected_ranges (affected_id, range_type, introduced, fixed)
-                         VALUES (?1, ?2, ?3, ?4)",
-                        params![affected_id, range.range_type, range.introduced, range.fixed],
-                    )
-                    .map_err(|e| DatabaseError::Sqlite(e.to_string()))?;
-                }
+                self.db.data.entry(key).or_default().push(entry);
             }
         }
-
-        tx.commit()
-            .map_err(|e| DatabaseError::Sqlite(e.to_string()))
+        Ok(())
     }
 
     /// Query vulnerabilities affecting the given ecosystem and package name.
-    ///
-    /// Uses a single JOIN query across vulnerabilities → affected_packages →
-    /// affected_ranges, then groups the results in Rust to avoid N+1 queries.
     pub fn query(
         &self,
         ecosystem: &str,
         package_name: &str,
     ) -> Result<Vec<VulnQueryResult>, DatabaseError> {
-        let mut stmt = self
-            .conn
-            .prepare(
-                "SELECT v.id, v.summary, v.details, v.severity, v.published, v.modified,
-                        ap.id AS affected_id, v.source, v.cvss_score,
-                        ar.range_type, ar.introduced, ar.fixed
-                 FROM vulnerabilities v
-                 JOIN affected_packages ap ON ap.vuln_id = v.id AND ap.vuln_source = v.source
-                 LEFT JOIN affected_ranges ar ON ar.affected_id = ap.id
-                 WHERE ap.ecosystem = ?1 AND ap.package_name = ?2
-                   AND v.withdrawn IS NULL",
-            )
-            .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
+        let key = make_key(ecosystem, package_name);
+        let entries = match self.db.data.get(&key) {
+            Some(e) => e,
+            None => return Ok(Vec::new()),
+        };
 
-        // Each row may repeat the vulnerability fields for multiple ranges.
-        // Key: (id, source, affected_id) → index into `ordered` Vec.
-        let mut index: HashMap<(String, String, i64), usize> = HashMap::new();
-        let mut ordered: Vec<VulnQueryResult> = Vec::new();
-
-        let rows = stmt
-            .query_map(params![ecosystem, package_name], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,          // id
-                    row.get::<_, String>(1)?,          // summary
-                    row.get::<_, String>(2)?,          // details
-                    row.get::<_, String>(3)?,          // severity
-                    row.get::<_, String>(4)?,          // published
-                    row.get::<_, String>(5)?,          // modified
-                    row.get::<_, i64>(6)?,             // affected_id
-                    row.get::<_, String>(7)?,          // source
-                    row.get::<_, Option<f64>>(8)?,     // cvss_score
-                    row.get::<_, Option<String>>(9)?,  // range_type
-                    row.get::<_, Option<String>>(10)?, // introduced
-                    row.get::<_, Option<String>>(11)?, // fixed
-                ))
+        let results = entries
+            .iter()
+            .map(|e| VulnQueryResult {
+                id: e.id.clone(),
+                summary: e.summary.clone(),
+                severity: severity_from_u8(e.severity),
+                published: e.published.clone(),
+                modified: String::new(),
+                source: e.source.clone(),
+                cvss_score: e.cvss_score.map(|v| v as f64),
+                ranges: e
+                    .ranges
+                    .iter()
+                    .map(|r| AffectedRange {
+                        range_type: range_type_from_u8(r.range_type),
+                        introduced: r.introduced.clone(),
+                        fixed: r.fixed.clone(),
+                    })
+                    .collect(),
             })
-            .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
+            .collect();
 
-        for row in rows {
-            let (
-                id,
-                summary,
-                details,
-                severity_str,
-                published,
-                modified,
-                affected_id,
-                source,
-                cvss_score,
-                range_type,
-                introduced,
-                fixed,
-            ) = row.map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
+        Ok(results)
+    }
 
-            let key = (id.clone(), source.clone(), affected_id);
+    /// Write the database to disk (serialize + compress).
+    pub fn save(&self) -> Result<(), DatabaseError> {
+        let path = self
+            .path
+            .as_ref()
+            .ok_or_else(|| DatabaseError::Storage("cannot save in-memory database".to_string()))?;
 
-            let idx = if let Some(&i) = index.get(&key) {
-                i
-            } else {
-                let i = ordered.len();
-                index.insert(key, i);
-                ordered.push(VulnQueryResult {
-                    id,
-                    summary,
-                    details,
-                    severity: Severity::parse(&severity_str),
-                    published,
-                    modified,
-                    source,
-                    cvss_score,
-                    ranges: Vec::new(),
-                });
-                i
-            };
+        let encoded = bincode::serialize(&self.db)
+            .map_err(|e| DatabaseError::Storage(format!("failed to serialize: {}", e)))?;
 
-            // Append the range if this row carries one (LEFT JOIN may return NULLs).
-            if let Some(rt) = range_type {
-                ordered[idx].ranges.push(AffectedRange {
-                    range_type: rt,
-                    introduced,
-                    fixed,
-                });
+        let compressed = lz4_flex::compress_prepend_size(&encoded);
+
+        // Write atomically via temp file
+        let tmp_path = format!("{}.tmp", path);
+        std::fs::write(&tmp_path, &compressed)
+            .map_err(|e| DatabaseError::Storage(format!("failed to write {}: {}", tmp_path, e)))?;
+        std::fs::rename(&tmp_path, path)
+            .map_err(|e| DatabaseError::Storage(format!("failed to rename: {}", e)))?;
+
+        eprintln!(
+            "Database saved: {} entries, {:.1}MB compressed",
+            self.db.data.len(),
+            compressed.len() as f64 / 1_048_576.0,
+        );
+
+        Ok(())
+    }
+
+    /// Count unique vulnerability IDs.
+    pub fn vulnerability_count(&self) -> usize {
+        let mut seen = std::collections::HashSet::new();
+        for entries in self.db.data.values() {
+            for e in entries {
+                seen.insert(&e.id);
             }
         }
-
-        Ok(ordered)
+        seen.len()
     }
 
-    /// Retrieve the version ranges for a given affected_packages row id.
-    pub fn query_ranges(&self, affected_id: i64) -> Result<Vec<AffectedRange>, DatabaseError> {
-        let mut stmt = self
-            .conn
-            .prepare(
-                "SELECT range_type, introduced, fixed
-                 FROM affected_ranges
-                 WHERE affected_id = ?1",
-            )
-            .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
-
-        let rows = stmt
-            .query_map(params![affected_id], |row| {
-                Ok(AffectedRange {
-                    range_type: row.get(0)?,
-                    introduced: row.get(1)?,
-                    fixed: row.get(2)?,
-                })
-            })
-            .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
-
-        rows.map(|r| r.map_err(|e| DatabaseError::QueryFailed(e.to_string())))
-            .collect()
+    /// No-op for binary format (no compaction needed).
+    pub fn vacuum(&self) -> Result<(), DatabaseError> {
+        Ok(())
     }
-}
-
-/// Parse a simplified ISO 8601 timestamp (YYYY-MM-DDTHH:MM:SSZ) to Unix epoch seconds.
-fn parse_iso8601_to_epoch(s: &str) -> Result<u64, ()> {
-    // Expect format: 2026-03-22T18:28:22Z or similar
-    let s = s.trim_end_matches('Z');
-    let (date, time) = s.split_once('T').ok_or(())?;
-    let date_parts: Vec<&str> = date.split('-').collect();
-    let time_parts: Vec<&str> = time.split(':').collect();
-    if date_parts.len() != 3 || time_parts.len() < 2 {
-        return Err(());
-    }
-    let year: u64 = date_parts[0].parse().map_err(|_| ())?;
-    let month: u64 = date_parts[1].parse().map_err(|_| ())?;
-    let day: u64 = date_parts[2].parse().map_err(|_| ())?;
-    let hour: u64 = time_parts[0].parse().map_err(|_| ())?;
-    let min: u64 = time_parts[1].parse().map_err(|_| ())?;
-    let sec: u64 = time_parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-
-    // Rough epoch calculation (ignoring leap seconds, good enough for staleness checks)
-    let mut days: u64 = 0;
-    for y in 1970..year {
-        days += if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
-            366
-        } else {
-            365
-        };
-    }
-    let month_days: [u64; 12] = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    for m in 0..(month.saturating_sub(1) as usize).min(12) {
-        days += month_days[m];
-    }
-    days += day.saturating_sub(1);
-
-    Ok(days * 86400 + hour * 3600 + min * 60 + sec)
 }
 
 #[cfg(test)]
@@ -514,7 +317,6 @@ mod tests {
         VulnRecord {
             id: "GO-2023-0001".to_string(),
             summary: "Remote code execution in example/pkg".to_string(),
-            details: "An attacker can craft a malicious request to trigger RCE.".to_string(),
             severity: Severity::High,
             published: "2023-01-01T00:00:00Z".to_string(),
             modified: "2023-02-01T00:00:00Z".to_string(),
@@ -558,6 +360,7 @@ mod tests {
         assert_eq!(results[0].id, "GO-2023-0001");
         assert_eq!(results[0].severity, Severity::High);
         assert_eq!(results[0].ranges.len(), 1);
+        assert_eq!(results[0].ranges[0].range_type, "SEMVER");
         assert_eq!(results[0].ranges[0].introduced, Some("1.0.0".to_string()));
         assert_eq!(results[0].ranges[0].fixed, Some("1.2.3".to_string()));
     }
@@ -600,5 +403,78 @@ mod tests {
         let severities: Vec<Severity> = results.iter().map(|r| r.severity).collect();
         assert!(severities.contains(&Severity::High));
         assert!(severities.contains(&Severity::Critical));
+    }
+
+    #[test]
+    fn test_withdrawn_not_returned() {
+        let mut store = VulnStore::open_in_memory().expect("should create in-memory db");
+        let mut record = sample_record();
+        record.withdrawn = Some("2023-03-01T00:00:00Z".to_string());
+
+        store
+            .insert_vulnerabilities(&[record])
+            .expect("insert should succeed");
+
+        // Withdrawn records are skipped during insertion
+        assert_eq!(store.vulnerability_count(), 0);
+
+        let results = store
+            .query("Go", "github.com/example/pkg")
+            .expect("query should succeed");
+        assert!(
+            results.is_empty(),
+            "withdrawn vulnerabilities should not be returned"
+        );
+    }
+
+    #[test]
+    fn test_severity_roundtrip() {
+        for (sev, expected) in [
+            (Severity::None, 0u8),
+            (Severity::Low, 1),
+            (Severity::Medium, 2),
+            (Severity::High, 3),
+            (Severity::Critical, 4),
+        ] {
+            let encoded = severity_to_u8(sev);
+            assert_eq!(encoded, expected);
+            assert_eq!(severity_from_u8(encoded), sev);
+        }
+    }
+
+    #[test]
+    fn test_range_type_roundtrip() {
+        for (s, expected) in [("ECOSYSTEM", 0u8), ("SEMVER", 1), ("GIT", 2)] {
+            let encoded = range_type_to_u8(s);
+            assert_eq!(encoded, expected);
+            assert_eq!(range_type_from_u8(encoded), s);
+        }
+    }
+
+    #[test]
+    fn test_source_normalization() {
+        let mut store = VulnStore::open_in_memory().expect("should create in-memory db");
+
+        let mut r1 = sample_record();
+        r1.source = "osv".to_string();
+
+        let mut r2 = sample_record();
+        r2.id = "CVE-2023-0001".to_string();
+        r2.source = "nvd".to_string();
+
+        store
+            .insert_vulnerabilities(&[r1, r2])
+            .expect("insert should succeed");
+
+        assert_eq!(store.vulnerability_count(), 2);
+
+        let results = store
+            .query("Go", "github.com/example/pkg")
+            .expect("query should succeed");
+        assert_eq!(results.len(), 2);
+
+        let sources: Vec<&str> = results.iter().map(|r| r.source.as_str()).collect();
+        assert!(sources.contains(&"osv"));
+        assert!(sources.contains(&"nvd"));
     }
 }

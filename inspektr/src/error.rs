@@ -59,8 +59,8 @@ pub enum DatabaseError {
     #[error("Failed to import vulnerability data: {0}")]
     ImportFailed(String),
 
-    #[error("SQLite error: {0}")]
-    Sqlite(String),
+    #[error("Storage error: {0}")]
+    Storage(String),
 }
 
 #[derive(Debug, Error)]

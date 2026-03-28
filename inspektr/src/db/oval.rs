@@ -198,7 +198,6 @@ pub fn parse_oval_xml(
                             records.push(VulnRecord {
                                 id: cve_id.clone(),
                                 summary: title.clone(),
-                                details: String::new(),
                                 severity,
                                 published: published.clone(),
                                 modified: String::new(),
