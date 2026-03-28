@@ -23,9 +23,6 @@ impl VulnSource for OracleSource {
             }
         }
 
-        eprintln!("oracle: clearing previous data...");
-        store.clear_source("oracle")?;
-
         const VERSIONS: &[(&str, &str)] = &[
             (
                 "7",
@@ -65,8 +62,6 @@ impl VulnSource for OracleSource {
             eprintln!("oracle: Oracle:{} — {} vulnerabilities", version, count);
             total += count;
         }
-
-        store.set_last_updated("oracle", &crate::sbom::spdx::chrono_now())?;
 
         Ok(total)
     }

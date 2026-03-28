@@ -310,7 +310,6 @@ mod tests {
             vulnerability: Vulnerability {
                 id: id.to_string(),
                 summary: "Test summary".to_string(),
-                details: "Test details.".to_string(),
                 severity,
                 published: "2023-01-01T00:00:00Z".to_string(),
                 modified: "2023-02-01T00:00:00Z".to_string(),
@@ -342,7 +341,6 @@ mod tests {
             vulnerability: Vulnerability {
                 id: id.to_string(),
                 summary: "Test vulnerability".to_string(),
-                details: String::new(),
                 severity,
                 published: "2023-01-01T00:00:00Z".to_string(),
                 modified: "2023-01-01T00:00:00Z".to_string(),

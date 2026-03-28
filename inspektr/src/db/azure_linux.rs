@@ -21,9 +21,6 @@ impl VulnSource for AzureLinuxSource {
             }
         }
 
-        eprintln!("azurelinux: clearing previous data...");
-        store.clear_source("azurelinux")?;
-
         const VERSIONS: &[(&str, &str)] = &[
             (
                 "1.0",
@@ -60,8 +57,6 @@ impl VulnSource for AzureLinuxSource {
             );
             total += count;
         }
-
-        store.set_last_updated("azurelinux", &crate::sbom::spdx::chrono_now())?;
 
         Ok(total)
     }

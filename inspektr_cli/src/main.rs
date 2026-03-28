@@ -419,6 +419,16 @@ fn cmd_db_build(
         None => None,
     };
 
+    // Always build from scratch — delete any existing database file.
+    if db_path.exists() {
+        std::fs::remove_file(&db_path).with_context(|| {
+            format!(
+                "Failed to remove existing database at '{}'",
+                db_path.display()
+            )
+        })?;
+    }
+
     eprintln!("Building vulnerability database at {} …", db_path.display());
 
     let db_str = db_path.to_string_lossy();
@@ -452,6 +462,9 @@ fn cmd_db_build(
             failures.join("\n  ")
         );
     }
+
+    eprintln!("Compacting database...");
+    store.vacuum().context("Failed to compact database")?;
 
     eprintln!("Built database with {} total vulnerabilities.", total);
     Ok(())

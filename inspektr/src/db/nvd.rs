@@ -258,7 +258,6 @@ fn cve_to_vuln_records(cve: &NvdCve, ecosystem_filter: Option<&str>) -> Vec<Vuln
     vec![VulnRecord {
         id: cve.id.clone(),
         summary,
-        details: String::new(),
         severity,
         published: cve.published.clone(),
         modified: cve.last_modified.clone(),
@@ -305,25 +304,19 @@ impl NvdClient {
     fn fetch_page(
         &mut self,
         start_index: u32,
-        last_mod_start: Option<&str>,
     ) -> Result<NvdResponse, DatabaseError> {
         let mut last_error = String::new();
 
         for attempt in 0..Self::MAX_RETRIES {
             self.rate_limiter.wait_if_needed();
 
-            let mut query_params = vec![
+            let query_params = vec![
                 ("startIndex".to_string(), start_index.to_string()),
                 (
                     "resultsPerPage".to_string(),
                     self.results_per_page().to_string(),
                 ),
             ];
-
-            if let Some(start_date) = last_mod_start {
-                query_params.push(("lastModStartDate".to_string(), start_date.to_string()));
-                query_params.push(("lastModEndDate".to_string(), now_iso8601()));
-            }
 
             let mut request = self.http.get(NVD_API_BASE).query(&query_params);
 
@@ -431,18 +424,10 @@ impl VulnSource for NvdSource {
         let mut total_cves = 0;
         let mut start_index = 0u32;
 
-        // Check for last update timestamp — if present, do incremental import
-        let last_mod_start = store.last_updated("nvd");
-        if let Some(ref ts) = last_mod_start {
-            eprintln!("nvd: incremental update since {}", ts);
-        } else {
-            eprintln!("nvd: full import (no previous update found)");
-            // Clear existing NVD data for clean full import
-            store.clear_source("nvd")?;
-        }
+        eprintln!("nvd: full import");
 
         loop {
-            let response = client.fetch_page(start_index, last_mod_start.as_deref())?;
+            let response = client.fetch_page(start_index)?;
             let total_results = response.total_results;
             let page_size = response.results_per_page;
             let page_num = start_index / page_size + 1;
@@ -479,16 +464,8 @@ impl VulnSource for NvdSource {
             total_imported, total_cves, match_rate
         );
 
-        // Record the update timestamp
-        store.set_last_updated("nvd", &now_iso8601())?;
-
         Ok(total_imported)
     }
-}
-
-/// Current UTC time as ISO 8601 string (for NVD API date parameters).
-fn now_iso8601() -> String {
-    crate::sbom::spdx::chrono_now()
 }
 
 /// Log a retry message and sleep with exponential backoff.
@@ -510,7 +487,6 @@ fn retry_with_backoff(attempt: u32, reason: &str) {
 #[cfg(all(test, feature = "db-admin"))]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     // -----------------------------------------------------------------------
     // Rate limiter tests

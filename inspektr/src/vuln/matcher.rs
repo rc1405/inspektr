@@ -101,7 +101,6 @@ pub fn match_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityM
                 vulnerability: Vulnerability {
                     id: result.id.clone(),
                     summary: result.summary.clone(),
-                    details: result.details.clone(),
                     severity: result.severity,
                     published: result.published.clone(),
                     modified: result.modified.clone(),
@@ -167,7 +166,6 @@ fn match_os_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityMa
                     vulnerability: crate::models::Vulnerability {
                         id: result.id.clone(),
                         summary: result.summary.clone(),
-                        details: result.details.clone(),
                         severity: result.severity,
                         published: result.published.clone(),
                         modified: result.modified.clone(),
@@ -206,7 +204,6 @@ mod tests {
         let record = VulnRecord {
             id: "GO-2023-0001".to_string(),
             summary: "Test vulnerability".to_string(),
-            details: "Details here.".to_string(),
             severity: Severity::High,
             published: "2023-01-01T00:00:00Z".to_string(),
             modified: "2023-02-01T00:00:00Z".to_string(),
@@ -272,7 +269,6 @@ mod tests {
             .insert_vulnerabilities(&[VulnRecord {
                 id: "DSA-5678".to_string(),
                 summary: "Debian openssl vuln".to_string(),
-                details: String::new(),
                 severity: Severity::High,
                 published: "2024-01-01T00:00:00Z".to_string(),
                 modified: "2024-01-01T00:00:00Z".to_string(),

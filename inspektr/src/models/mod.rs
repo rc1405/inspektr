@@ -298,7 +298,6 @@ impl Severity {
 pub struct Vulnerability {
     pub id: String,
     pub summary: String,
-    pub details: String,
     pub severity: Severity,
     pub published: String,
     pub modified: String,

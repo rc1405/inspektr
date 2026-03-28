@@ -47,7 +47,6 @@ pub fn parse_updateinfo_xml(xml: &str) -> Result<Vec<VulnRecord>, DatabaseError>
     let mut in_id = false;
     let mut in_title = false;
     let mut in_severity = false;
-    let mut in_description = false;
     let mut in_references = false;
     let mut in_pkglist = false;
 
@@ -55,7 +54,6 @@ pub fn parse_updateinfo_xml(xml: &str) -> Result<Vec<VulnRecord>, DatabaseError>
     let mut advisory_id = String::new();
     let mut title = String::new();
     let mut severity = Severity::None;
-    let mut description = String::new();
     let mut published = String::new();
     let mut cve_ids: Vec<String> = Vec::new();
     let mut packages: Vec<(String, String)> = Vec::new(); // (name, version_string)
@@ -72,7 +70,6 @@ pub fn parse_updateinfo_xml(xml: &str) -> Result<Vec<VulnRecord>, DatabaseError>
                             advisory_id.clear();
                             title.clear();
                             severity = Severity::None;
-                            description.clear();
                             published.clear();
                             cve_ids.clear();
                             packages.clear();
@@ -86,9 +83,6 @@ pub fn parse_updateinfo_xml(xml: &str) -> Result<Vec<VulnRecord>, DatabaseError>
                     }
                     b"severity" if in_update => {
                         in_severity = true;
-                    }
-                    b"description" if in_update => {
-                        in_description = true;
                     }
                     b"references" if in_update => {
                         in_references = true;
@@ -162,10 +156,6 @@ pub fn parse_updateinfo_xml(xml: &str) -> Result<Vec<VulnRecord>, DatabaseError>
                     if let Ok(text) = e.unescape() {
                         severity = map_severity(&text);
                     }
-                } else if in_description {
-                    if let Ok(text) = e.unescape() {
-                        description.push_str(&text);
-                    }
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -190,7 +180,6 @@ pub fn parse_updateinfo_xml(xml: &str) -> Result<Vec<VulnRecord>, DatabaseError>
                             records.push(VulnRecord {
                                 id: cve_id.clone(),
                                 summary: title.clone(),
-                                details: description.clone(),
                                 severity,
                                 published: published.clone(),
                                 modified: String::new(),
@@ -208,7 +197,6 @@ pub fn parse_updateinfo_xml(xml: &str) -> Result<Vec<VulnRecord>, DatabaseError>
                     b"id" => in_id = false,
                     b"title" => in_title = false,
                     b"severity" => in_severity = false,
-                    b"description" => in_description = false,
                     b"references" => in_references = false,
                     b"pkglist" => in_pkglist = false,
                     _ => {}
@@ -258,9 +246,6 @@ impl VulnSource for BottlerocketSource {
             }
         }
 
-        eprintln!("bottlerocket: clearing previous data...");
-        store.clear_source("bottlerocket")?;
-
         const URL: &str = "https://advisories.bottlerocket.aws/updateinfo.xml.gz";
 
         eprintln!("bottlerocket: downloading {}...", URL);
@@ -285,8 +270,6 @@ impl VulnSource for BottlerocketSource {
         let count = records.len();
         store.insert_vulnerabilities(&records)?;
         eprintln!("bottlerocket: {} vulnerabilities imported", count);
-
-        store.set_last_updated("bottlerocket", &crate::sbom::spdx::chrono_now())?;
 
         Ok(count)
     }
