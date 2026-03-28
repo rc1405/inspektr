@@ -432,7 +432,8 @@ fn cmd_db_build(
     eprintln!("Building vulnerability database at {} …", db_path.display());
 
     let db_str = db_path.to_string_lossy();
-    let mut store = VulnStore::create(&db_str).context("Failed to create vulnerability database")?;
+    let mut store =
+        VulnStore::create(&db_str).context("Failed to create vulnerability database")?;
 
     let mut total = 0;
     let mut failures: Vec<String> = Vec::new();

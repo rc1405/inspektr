@@ -301,10 +301,7 @@ impl NvdClient {
     /// Base backoff duration in seconds (doubles each attempt).
     const RETRY_BACKOFF_SECS: u64 = 30;
 
-    fn fetch_page(
-        &mut self,
-        start_index: u32,
-    ) -> Result<NvdResponse, DatabaseError> {
+    fn fetch_page(&mut self, start_index: u32) -> Result<NvdResponse, DatabaseError> {
         let mut last_error = String::new();
 
         for attempt in 0..Self::MAX_RETRIES {

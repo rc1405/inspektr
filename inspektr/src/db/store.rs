@@ -144,19 +144,16 @@ impl VulnStore {
             });
         }
 
-        let data = std::fs::read(path).map_err(|e| {
-            DatabaseError::Storage(format!("failed to read {}: {}", path, e))
-        })?;
+        let data = std::fs::read(path)
+            .map_err(|e| DatabaseError::Storage(format!("failed to read {}: {}", path, e)))?;
 
         // Decompress LZ4
-        let decompressed = lz4_flex::decompress_size_prepended(&data).map_err(|e| {
-            DatabaseError::Storage(format!("failed to decompress: {}", e))
-        })?;
+        let decompressed = lz4_flex::decompress_size_prepended(&data)
+            .map_err(|e| DatabaseError::Storage(format!("failed to decompress: {}", e)))?;
 
         // Deserialize bincode
-        let db: VulnDatabase = bincode::deserialize(&decompressed).map_err(|e| {
-            DatabaseError::Storage(format!("failed to deserialize: {}", e))
-        })?;
+        let db: VulnDatabase = bincode::deserialize(&decompressed)
+            .map_err(|e| DatabaseError::Storage(format!("failed to deserialize: {}", e)))?;
 
         if db.version != SCHEMA_VERSION {
             return Err(DatabaseError::Storage(format!(
@@ -269,24 +266,22 @@ impl VulnStore {
 
     /// Write the database to disk (serialize + compress).
     pub fn save(&self) -> Result<(), DatabaseError> {
-        let path = self.path.as_ref().ok_or_else(|| {
-            DatabaseError::Storage("cannot save in-memory database".to_string())
-        })?;
+        let path = self
+            .path
+            .as_ref()
+            .ok_or_else(|| DatabaseError::Storage("cannot save in-memory database".to_string()))?;
 
-        let encoded = bincode::serialize(&self.db).map_err(|e| {
-            DatabaseError::Storage(format!("failed to serialize: {}", e))
-        })?;
+        let encoded = bincode::serialize(&self.db)
+            .map_err(|e| DatabaseError::Storage(format!("failed to serialize: {}", e)))?;
 
         let compressed = lz4_flex::compress_prepend_size(&encoded);
 
         // Write atomically via temp file
         let tmp_path = format!("{}.tmp", path);
-        std::fs::write(&tmp_path, &compressed).map_err(|e| {
-            DatabaseError::Storage(format!("failed to write {}: {}", tmp_path, e))
-        })?;
-        std::fs::rename(&tmp_path, path).map_err(|e| {
-            DatabaseError::Storage(format!("failed to rename: {}", e))
-        })?;
+        std::fs::write(&tmp_path, &compressed)
+            .map_err(|e| DatabaseError::Storage(format!("failed to write {}: {}", tmp_path, e)))?;
+        std::fs::rename(&tmp_path, path)
+            .map_err(|e| DatabaseError::Storage(format!("failed to rename: {}", e)))?;
 
         eprintln!(
             "Database saved: {} entries, {:.1}MB compressed",
