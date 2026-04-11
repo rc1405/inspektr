@@ -1,3 +1,8 @@
+//! SPDX 2.3 JSON SBOM format.
+//!
+//! Implements encoding and decoding of SBOMs in the
+//! [SPDX 2.3](https://spdx.github.io/spdx-spec/v2.3/) JSON format.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -57,6 +62,7 @@ struct SpdxExternalRef {
 // SbomFormat implementation
 // ---------------------------------------------------------------------------
 
+/// SPDX 2.3 JSON SBOM encoder/decoder.
 pub struct SpdxFormat;
 
 impl SbomFormat for SpdxFormat {

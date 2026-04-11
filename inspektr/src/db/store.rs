@@ -1,3 +1,24 @@
+//! Vulnerability database storage engine.
+//!
+//! The [`VulnStore`] provides a compressed binary database backed by
+//! bincode + LZ4. Vulnerabilities are indexed by `(ecosystem, package_name)`
+//! for fast lookups during scanning.
+//!
+//! # Usage
+//!
+//! ```no_run
+//! use inspektr::db::store::VulnStore;
+//!
+//! // Open an existing database
+//! let store = VulnStore::open("/path/to/vuln.db").unwrap();
+//!
+//! // Query vulnerabilities for a specific package
+//! let results = store.query("Go", "github.com/example/pkg").unwrap();
+//! for result in &results {
+//!     println!("{}: {}", result.id, result.summary);
+//! }
+//! ```
+
 use crate::error::DatabaseError;
 use crate::models::Severity;
 use serde::{Deserialize, Serialize};
@@ -5,49 +26,75 @@ use std::collections::HashMap;
 use std::path::Path;
 
 // ---------------------------------------------------------------------------
-// Public types (unchanged API)
+// Public types
 // ---------------------------------------------------------------------------
 
-/// A vulnerability record to be stored in the database.
+/// A vulnerability record to be inserted into the database.
+///
+/// Used by `VulnSource` importers (with `db-admin` feature) to feed data into
+/// the store via [`VulnStore::insert_vulnerabilities()`].
 #[derive(Debug, Clone)]
 pub struct VulnRecord {
+    /// The vulnerability identifier (e.g., `"CVE-2023-44487"`, `"GO-2023-0001"`).
     pub id: String,
+    /// A short description of the vulnerability.
     pub summary: String,
+    /// The severity level.
     pub severity: Severity,
+    /// ISO 8601 timestamp when first published.
     pub published: String,
+    /// ISO 8601 timestamp when last modified.
     pub modified: String,
+    /// ISO 8601 timestamp if withdrawn; withdrawn records are skipped during import.
     pub withdrawn: Option<String>,
+    /// The data source name (e.g., `"osv"`, `"nvd"`).
     pub source: String,
+    /// CVSS v3 base score (0.0–10.0), if available.
     pub cvss_score: Option<f64>,
+    /// Packages and version ranges affected by this vulnerability.
     pub affected: Vec<AffectedPackage>,
 }
 
 /// A package affected by a vulnerability.
 #[derive(Debug, Clone)]
 pub struct AffectedPackage {
+    /// The ecosystem name (OSV format, e.g., `"Go"`, `"npm"`, `"Alpine"`).
     pub ecosystem: String,
+    /// The package name within the ecosystem.
     pub package_name: String,
+    /// Version ranges in which the package is vulnerable.
     pub ranges: Vec<AffectedRange>,
 }
 
 /// A version range in which a package is vulnerable.
 #[derive(Debug, Clone)]
 pub struct AffectedRange {
+    /// The range type: `"SEMVER"` or `"ECOSYSTEM"`.
     pub range_type: String,
+    /// The version where the vulnerability was introduced (`None` = from the beginning).
     pub introduced: Option<String>,
+    /// The version where the vulnerability was fixed (`None` = no fix available).
     pub fixed: Option<String>,
 }
 
-/// The result of a vulnerability query.
+/// The result of querying the vulnerability database for a specific package.
 #[derive(Debug, Clone)]
 pub struct VulnQueryResult {
+    /// The vulnerability identifier.
     pub id: String,
+    /// A short description.
     pub summary: String,
+    /// The severity level.
     pub severity: Severity,
+    /// When first published.
     pub published: String,
+    /// When last modified.
     pub modified: String,
+    /// The data source.
     pub source: String,
+    /// CVSS v3 base score, if available.
     pub cvss_score: Option<f64>,
+    /// Version ranges in which the package is affected.
     pub ranges: Vec<AffectedRange>,
 }
 
@@ -129,7 +176,19 @@ fn range_type_from_u8(v: u8) -> String {
 // VulnStore
 // ---------------------------------------------------------------------------
 
-/// Binary vulnerability database backed by bincode + LZ4 compression.
+/// Vulnerability database backed by bincode serialization + LZ4 compression.
+///
+/// The store indexes vulnerabilities by `(ecosystem, package_name)` for
+/// O(1) lookup during scanning. The on-disk format is a single LZ4-compressed
+/// bincode blob with a schema version check on open.
+///
+/// # Database lifecycle
+///
+/// - **Open** an existing database with [`VulnStore::open()`]
+/// - **Create** a new empty database with [`VulnStore::create()`]
+/// - **Query** with [`VulnStore::query()`]
+/// - **Insert** records with [`VulnStore::insert_vulnerabilities()`]
+/// - **Save** to disk with [`VulnStore::save()`]
 pub struct VulnStore {
     db: VulnDatabase,
     path: Option<String>,
@@ -177,6 +236,39 @@ impl VulnStore {
             },
             path: Some(path.to_string()),
         })
+    }
+
+    /// Load a database from raw bytes (the on-disk LZ4+bincode format).
+    ///
+    /// This allows loading a database without writing it to a file first,
+    /// which is useful for in-memory workflows where you pull the database
+    /// from an OCI registry and use it directly.
+    ///
+    /// ```no_run
+    /// use inspektr::db::store::VulnStore;
+    /// use inspektr::oci::{RegistryAuth, pull::pull_artifact_bytes};
+    ///
+    /// let bytes = pull_artifact_bytes(
+    ///     inspektr::db::DEFAULT_DB_REGISTRY,
+    ///     &RegistryAuth::Anonymous,
+    /// ).unwrap();
+    /// let store = VulnStore::from_bytes(&bytes).unwrap();
+    /// ```
+    pub fn from_bytes(data: &[u8]) -> Result<Self, DatabaseError> {
+        let decompressed = lz4_flex::decompress_size_prepended(data)
+            .map_err(|e| DatabaseError::Storage(format!("failed to decompress: {}", e)))?;
+
+        let db: VulnDatabase = bincode::deserialize(&decompressed)
+            .map_err(|e| DatabaseError::Storage(format!("failed to deserialize: {}", e)))?;
+
+        if db.version != SCHEMA_VERSION {
+            return Err(DatabaseError::Storage(format!(
+                "database version {} != expected {}. Rebuild with `inspektr db build`.",
+                db.version, SCHEMA_VERSION
+            )));
+        }
+
+        Ok(Self { db, path: None })
     }
 
     /// Open an in-memory database (useful for tests).

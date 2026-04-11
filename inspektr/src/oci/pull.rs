@@ -15,15 +15,14 @@ use crate::error::OciError;
 use crate::models::{FileContents, FileEntry};
 use crate::source::filesystem::is_binary_content;
 
-/// Pull an OCI artifact (e.g. a database file) and write it to `output_path`.
+/// Pull an OCI artifact and return its raw bytes.
 ///
-/// This is used for pulling the vulnerability DB artifact stored as a single-layer
-/// OCI artifact.
-pub fn pull_artifact(
-    reference_str: &str,
-    output_path: &Path,
-    auth: &RegistryAuth,
-) -> Result<(), OciError> {
+/// Downloads a single-layer OCI artifact from a registry. If the layer is
+/// gzip-compressed, it is automatically decompressed before returning.
+///
+/// This is the building block for both [`pull_artifact()`] (write to file)
+/// and [`crate::db::download_to_memory()`] (load directly into a `VulnStore`).
+pub fn pull_artifact_bytes(reference_str: &str, auth: &RegistryAuth) -> Result<Vec<u8>, OciError> {
     let reference: Reference =
         reference_str
             .parse()
@@ -83,7 +82,7 @@ pub fn pull_artifact(
             })?;
 
         // Decompress if gzipped (detected by gzip magic bytes 1f 8b)
-        let output_data = if blob_data.len() >= 2 && blob_data[0] == 0x1f && blob_data[1] == 0x8b {
+        if blob_data.len() >= 2 && blob_data[0] == 0x1f && blob_data[1] == 0x8b {
             let mut decoder = GzDecoder::new(&blob_data[..]);
             let mut decompressed = Vec::new();
             decoder
@@ -92,23 +91,33 @@ pub fn pull_artifact(
                     reference: reference_str.to_string(),
                     reason: format!("failed to decompress artifact: {}", e),
                 })?;
-            decompressed
+            Ok(decompressed)
         } else {
-            blob_data
-        };
-
-        // Write to output path
-        std::fs::write(output_path, &output_data).map_err(|e| OciError::PullFailed {
-            reference: reference_str.to_string(),
-            reason: format!(
-                "failed to write artifact to {}: {}",
-                output_path.display(),
-                e
-            ),
-        })?;
-
-        Ok(())
+            Ok(blob_data)
+        }
     })
+}
+
+/// Pull an OCI artifact and write it to `output_path`.
+///
+/// This is used for pulling the vulnerability DB artifact stored as a single-layer
+/// OCI artifact. See also [`pull_artifact_bytes()`] to get the raw bytes without
+/// writing to disk.
+pub fn pull_artifact(
+    reference_str: &str,
+    output_path: &Path,
+    auth: &RegistryAuth,
+) -> Result<(), OciError> {
+    let data = pull_artifact_bytes(reference_str, auth)?;
+    std::fs::write(output_path, &data).map_err(|e| OciError::PullFailed {
+        reference: reference_str.to_string(),
+        reason: format!(
+            "failed to write artifact to {}: {}",
+            output_path.display(),
+            e
+        ),
+    })?;
+    Ok(())
 }
 
 /// Pull and extract an OCI container image, returning all files as `FileEntry` items.

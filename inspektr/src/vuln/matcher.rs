@@ -1,3 +1,14 @@
+//! Vulnerability matching engine.
+//!
+//! Matches [`Package`] values against the vulnerability
+//! database by ecosystem and version range. Language ecosystems use semver
+//! comparison; OS ecosystems use string-based version comparison.
+//!
+//! The main entry points are:
+//!
+//! - [`match_package()`] — match a single package
+//! - [`match_packages()`] — match a slice of packages
+
 use crate::db::store::VulnStore;
 use crate::models::{Ecosystem, Package, Vulnerability, VulnerabilityMatch};
 use semver::Version;

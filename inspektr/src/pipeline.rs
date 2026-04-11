@@ -1,3 +1,35 @@
+//! High-level entry points for SBOM generation and vulnerability scanning.
+//!
+//! This module provides the main functions most consumers will use:
+//!
+//! - [`generate_sbom()`] — scan a target and return an [`Sbom`]
+//! - [`generate_sbom_bytes()`] — scan and encode as CycloneDX or SPDX bytes
+//! - [`scan_and_report()`] — scan for vulnerabilities and return a
+//!   [`ScanReport`](crate::vuln::report::ScanReport)
+//! - [`run_catalogers()`] — lower-level: run all catalogers against a set of files
+//! - [`default_db_path()`] — get the platform-appropriate vulnerability database path
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use inspektr::pipeline;
+//! use inspektr::oci::RegistryAuth;
+//!
+//! // Generate an SBOM
+//! let sbom = pipeline::generate_sbom(
+//!     "/path/to/project",
+//!     &RegistryAuth::Anonymous,
+//! ).unwrap();
+//!
+//! // Scan for vulnerabilities
+//! let report = pipeline::scan_and_report(
+//!     Some("/path/to/project"),
+//!     None,
+//!     &pipeline::default_db_path(),
+//!     &RegistryAuth::Anonymous,
+//! ).unwrap();
+//! ```
+
 use crate::cataloger::Cataloger;
 use crate::cataloger::conan::ConanCataloger;
 use crate::cataloger::dotnet::DotNetCataloger;
@@ -11,7 +43,7 @@ use crate::cataloger::ruby::RubyCataloger;
 use crate::cataloger::rust_lang::RustCataloger;
 use crate::cataloger::swift::SwiftCataloger;
 use crate::cataloger::vcpkg::VcpkgCataloger;
-use crate::error::LookingGlassError;
+use crate::error::InspektrError;
 use crate::models::{FileEntry, Package, Sbom};
 use crate::sbom::SbomFormat;
 use crate::sbom::cyclonedx::CycloneDxFormat;
@@ -62,7 +94,7 @@ pub fn run_catalogers(files: &[FileEntry]) -> Vec<Package> {
 fn source_from_target(
     target: &str,
     auth: &oci_client::secrets::RegistryAuth,
-) -> Result<Box<dyn Source>, LookingGlassError> {
+) -> Result<Box<dyn Source>, InspektrError> {
     match detect_target_type(target) {
         TargetType::OciImage => Ok(Box::new(OciImageSource::new(
             target.to_string(),
@@ -81,7 +113,7 @@ fn source_from_target(
 pub fn generate_sbom(
     target: &str,
     auth: &oci_client::secrets::RegistryAuth,
-) -> Result<Sbom, LookingGlassError> {
+) -> Result<Sbom, InspektrError> {
     let source = source_from_target(target, auth)?;
     let metadata = source.source_metadata();
     let files = source.files()?;
@@ -99,7 +131,7 @@ pub fn generate_sbom_bytes(
     target: &str,
     format: &str,
     auth: &oci_client::secrets::RegistryAuth,
-) -> Result<Vec<u8>, LookingGlassError> {
+) -> Result<Vec<u8>, InspektrError> {
     let sbom = generate_sbom(target, auth)?;
     let formatter = select_format(format)?;
     Ok(formatter.encode(&sbom)?)
@@ -114,7 +146,7 @@ pub fn scan_and_report(
     sbom_path: Option<&str>,
     db_path: &std::path::Path,
     auth: &oci_client::secrets::RegistryAuth,
-) -> Result<crate::vuln::report::ScanReport, LookingGlassError> {
+) -> Result<crate::vuln::report::ScanReport, InspektrError> {
     let (sbom, target_str, target_type_str) = match (target, sbom_path) {
         (_, Some(path)) => {
             let bytes = std::fs::read(path).map_err(|e| crate::error::SourceError::Io(e))?;
@@ -132,7 +164,7 @@ pub fn scan_and_report(
             (sbom, t.to_string(), tt.to_string())
         }
         (None, None) => {
-            return Err(LookingGlassError::Source(
+            return Err(InspektrError::Source(
                 crate::error::SourceError::UnsupportedTarget {
                     target: "(none)".to_string(),
                 },
@@ -154,11 +186,11 @@ pub fn scan_and_report(
 }
 
 /// Map a format name string to a `SbomFormat` implementation.
-fn select_format(format: &str) -> Result<Box<dyn SbomFormat>, LookingGlassError> {
+fn select_format(format: &str) -> Result<Box<dyn SbomFormat>, InspektrError> {
     match format {
         "cyclonedx" => Ok(Box::new(CycloneDxFormat)),
         "spdx" => Ok(Box::new(crate::sbom::spdx::SpdxFormat)),
-        other => Err(LookingGlassError::SbomFormat(
+        other => Err(InspektrError::SbomFormat(
             crate::error::SbomFormatError::EncodeFailed(format!(
                 "unsupported SBOM format: {}; supported formats are: cyclonedx, spdx",
                 other

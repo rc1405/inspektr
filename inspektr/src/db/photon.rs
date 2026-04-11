@@ -1,3 +1,9 @@
+//! VMware Photon OS vulnerability data importer.
+//!
+//! Parses Photon OS CVE JSON advisories for versions 1.0 through 5.0.
+//!
+//! Requires the `db-admin` feature.
+
 use crate::db::store::{AffectedPackage, AffectedRange, VulnRecord};
 use crate::error::DatabaseError;
 use crate::models::Severity;
@@ -7,6 +13,7 @@ use serde::Deserialize;
 // Photon OS CVE JSON schema structs
 // ---------------------------------------------------------------------------
 
+/// A single Photon OS CVE advisory entry.
 #[derive(Debug, Deserialize)]
 pub struct PhotonCveEntry {
     pub cve_id: String,

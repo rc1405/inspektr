@@ -1,3 +1,10 @@
+//! OCI artifact push functionality.
+//!
+//! Pushes files (e.g., the vulnerability database) as gzip-compressed OCI
+//! artifacts to a registry.
+//!
+//! Requires the `db-admin` feature.
+
 use std::io::Write;
 use std::path::Path;
 

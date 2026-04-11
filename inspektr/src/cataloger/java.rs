@@ -1,8 +1,14 @@
+//! Java ecosystem cataloger.
+//!
+//! Discovers Java/Maven packages from `pom.xml`, `build.gradle`, and
+//! `build.gradle.kts` files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for Java packages (Maven).
 pub struct JavaCataloger;
 
 impl Cataloger for JavaCataloger {

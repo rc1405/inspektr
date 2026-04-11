@@ -1,8 +1,13 @@
+//! PHP ecosystem cataloger.
+//!
+//! Discovers Composer packages from `composer.lock` files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for PHP Composer packages.
 pub struct PhpCataloger;
 
 impl Cataloger for PhpCataloger {

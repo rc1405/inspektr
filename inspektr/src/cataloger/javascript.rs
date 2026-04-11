@@ -1,8 +1,13 @@
+//! JavaScript/Node.js ecosystem cataloger.
+//!
+//! Discovers npm packages from `package-lock.json` and `yarn.lock` files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for JavaScript/Node.js packages.
 pub struct JavaScriptCataloger;
 
 impl Cataloger for JavaScriptCataloger {

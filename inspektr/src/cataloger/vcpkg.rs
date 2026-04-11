@@ -1,8 +1,13 @@
+//! C/C++ vcpkg ecosystem cataloger.
+//!
+//! Discovers vcpkg packages from `vcpkg.json` manifest files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for C/C++ vcpkg packages.
 pub struct VcpkgCataloger;
 
 impl Cataloger for VcpkgCataloger {

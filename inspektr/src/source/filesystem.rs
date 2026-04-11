@@ -1,15 +1,25 @@
+//! Filesystem-based file source.
+//!
+//! Recursively reads files from a local directory, or reads a single file
+//! when the target path points to a file rather than a directory. Files are
+//! classified as text or binary using [`is_binary_content()`].
+
 use std::path::{Path, PathBuf};
 
 use super::Source;
 use crate::error::SourceError;
 use crate::models::{FileContents, FileEntry, SourceMetadata};
 
-/// Reads files from a local directory.
+/// A [`Source`] that reads files from a local filesystem path.
+///
+/// If the path is a directory, all files are collected recursively.
+/// If the path is a single file (e.g., a compiled binary), only that file is returned.
 pub struct FilesystemSource {
     root: PathBuf,
 }
 
 impl FilesystemSource {
+    /// Create a new filesystem source rooted at the given path.
     pub fn new(root: PathBuf) -> Self {
         Self { root }
     }
@@ -68,8 +78,12 @@ fn collect_files(dir: &Path, entries: &mut Vec<FileEntry>) -> Result<(), SourceE
     Ok(())
 }
 
-/// Heuristic: check for ELF, Mach-O, or PE magic bytes, or null bytes in first 512 bytes.
-/// This function is public because it's reused by the OCI module.
+/// Detect whether file content is binary using magic bytes and null-byte heuristics.
+///
+/// Returns `true` if the content starts with known executable magic bytes
+/// (ELF, Mach-O, PE/MZ) or contains null bytes within the first 512 bytes.
+/// This is used during file discovery to classify files as
+/// [`FileContents::Binary`] vs [`FileContents::Text`].
 pub fn is_binary_content(bytes: &[u8]) -> bool {
     if bytes.len() >= 4 {
         // ELF

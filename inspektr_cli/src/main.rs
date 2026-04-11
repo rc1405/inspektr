@@ -102,7 +102,7 @@ enum DbCommands {
     /// Pull the latest pre-built vulnerability database.
     Update {
         /// OCI image reference for the database (default: rc1405/inspektr-db:latest)
-        #[arg(long, default_value = "rc1405/inspektr-db:latest")]
+        #[arg(long, default_value = inspektr::db::DEFAULT_DB_REGISTRY)]
         registry: String,
 
         /// Username for OCI registry authentication.
@@ -305,6 +305,10 @@ fn cmd_vuln(
     db: Option<&std::path::Path>,
     auth: &inspektr::oci::RegistryAuth,
 ) -> Result<()> {
+    if target.is_none() && sbom.is_none() {
+        bail!("No target specified. Usage: inspektr vuln <TARGET> or inspektr vuln --sbom <FILE>");
+    }
+
     let db_path = match db {
         Some(p) => p.to_path_buf(),
         None => pipeline::default_db_path(),

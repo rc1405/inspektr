@@ -1,3 +1,10 @@
+//! NVD (National Vulnerability Database) API importer.
+//!
+//! Fetches CVE data from the NVD 2.0 API with rate limiting and incremental
+//! update support. Uses CPE matching to map CVEs to package ecosystems.
+//!
+//! Requires the `db-admin` feature.
+
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::collections::VecDeque;

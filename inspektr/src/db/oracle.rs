@@ -1,3 +1,9 @@
+//! Oracle Linux OVAL data importer.
+//!
+//! Downloads and parses Oracle Linux OVAL feeds for versions 7, 8, and 9.
+//!
+//! Requires the `db-admin` feature.
+
 use crate::db::VulnSource;
 use crate::db::oval::parse_oval_xml;
 use crate::db::store::VulnStore;
@@ -5,6 +11,7 @@ use crate::error::DatabaseError;
 use bzip2::read::BzDecoder;
 use std::io::Read;
 
+/// Oracle Linux OVAL vulnerability data source.
 pub struct OracleSource;
 
 impl VulnSource for OracleSource {

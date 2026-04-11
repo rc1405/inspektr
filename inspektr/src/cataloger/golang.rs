@@ -1,3 +1,9 @@
+//! Go ecosystem cataloger.
+//!
+//! Discovers Go packages from `go.mod`, `go.sum`, and compiled Go binaries.
+//! Binary analysis uses the Go build info embedded in ELF/Mach-O/PE executables
+//! (identified by [`GO_BUILDINFO_MAGIC`]).
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
@@ -6,6 +12,7 @@ use std::collections::HashMap;
 /// Magic bytes found in Go binaries that contain build information.
 pub const GO_BUILDINFO_MAGIC: &[u8] = b"\xff Go buildinf:";
 
+/// Cataloger for Go modules and binaries.
 pub struct GoCataloger;
 
 impl Cataloger for GoCataloger {
@@ -136,7 +143,7 @@ pub fn extract_buildinfo_from_binary(bytes: &[u8]) -> Option<String> {
 
 /// Parses the human-readable portion of a Go binary's build info.
 /// Lines starting with "dep\t" are dependency entries.
-/// Format: dep\t<module>\t<version>[\t<hash>]
+/// Format: `dep\t<module>\t<version>[\t<hash>]`
 pub fn parse_buildinfo_text(text: &str) -> Result<Vec<Package>, CatalogerError> {
     let mut packages = Vec::new();
     for line in text.lines() {
@@ -224,7 +231,7 @@ pub fn parse_require_line(line: &str) -> Option<Package> {
 }
 
 /// Parses a go.sum file and returns packages (one per unique name@version pair).
-/// go.sum lines: <module> <version>[/go.mod] <hash>
+/// go.sum lines: `<module> <version>[/go.mod] <hash>`
 pub fn parse_go_sum(text: &str) -> Result<Vec<Package>, CatalogerError> {
     let mut packages = Vec::new();
     let mut seen = std::collections::HashSet::new();
