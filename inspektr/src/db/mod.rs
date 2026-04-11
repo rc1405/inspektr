@@ -75,9 +75,7 @@ pub fn download_to_file(
     let db_path = crate::pipeline::default_db_path();
 
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            crate::error::SourceError::Io(e)
-        })?;
+        std::fs::create_dir_all(parent).map_err(|e| crate::error::SourceError::Io(e))?;
     }
 
     crate::oci::pull::pull_artifact(registry, &db_path, auth)?;

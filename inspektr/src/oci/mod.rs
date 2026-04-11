@@ -203,8 +203,12 @@ mod tests {
     #[test]
     fn test_looks_like_image_ref() {
         // Registry with dot in hostname
-        assert!(ImageReference::looks_like_image_ref("ghcr.io/myorg/myrepo:v1"));
-        assert!(ImageReference::looks_like_image_ref("docker.io/library/golang:1.21"));
+        assert!(ImageReference::looks_like_image_ref(
+            "ghcr.io/myorg/myrepo:v1"
+        ));
+        assert!(ImageReference::looks_like_image_ref(
+            "docker.io/library/golang:1.21"
+        ));
         // Localhost
         assert!(ImageReference::looks_like_image_ref("localhost/myrepo"));
         // Bare name with digest
@@ -212,10 +216,14 @@ mod tests {
         // Bare name with tag
         assert!(ImageReference::looks_like_image_ref("ubuntu:22.04"));
         // Docker Hub short-form: user/repo:tag
-        assert!(ImageReference::looks_like_image_ref("rc1405/inspektr-db:latest"));
+        assert!(ImageReference::looks_like_image_ref(
+            "rc1405/inspektr-db:latest"
+        ));
         assert!(ImageReference::looks_like_image_ref("myuser/myrepo:v1.0"));
         // Docker Hub short-form with digest
-        assert!(ImageReference::looks_like_image_ref("myuser/myrepo@sha256:abc"));
+        assert!(ImageReference::looks_like_image_ref(
+            "myuser/myrepo@sha256:abc"
+        ));
         // NOT image refs — filesystem paths
         assert!(!ImageReference::looks_like_image_ref("/absolute/path"));
         assert!(!ImageReference::looks_like_image_ref(""));

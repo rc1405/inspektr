@@ -65,10 +65,7 @@ mod tests {
     #[test]
     fn test_detect_relative_paths_not_oci() {
         // Paths where the first segment exists on disk are filesystem, not OCI
-        assert_eq!(
-            detect_target_type("src/models"),
-            TargetType::Filesystem
-        );
+        assert_eq!(detect_target_type("src/models"), TargetType::Filesystem);
     }
 
     #[test]
@@ -79,10 +76,7 @@ mod tests {
             TargetType::OciImage
         );
         // user/repo without tag — non-existent path treated as OCI
-        assert_eq!(
-            detect_target_type("myorg/myrepo"),
-            TargetType::OciImage
-        );
+        assert_eq!(detect_target_type("myorg/myrepo"), TargetType::OciImage);
     }
 
     #[test]

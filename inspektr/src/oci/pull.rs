@@ -22,10 +22,7 @@ use crate::source::filesystem::is_binary_content;
 ///
 /// This is the building block for both [`pull_artifact()`] (write to file)
 /// and [`crate::db::download_to_memory()`] (load directly into a `VulnStore`).
-pub fn pull_artifact_bytes(
-    reference_str: &str,
-    auth: &RegistryAuth,
-) -> Result<Vec<u8>, OciError> {
+pub fn pull_artifact_bytes(reference_str: &str, auth: &RegistryAuth) -> Result<Vec<u8>, OciError> {
     let reference: Reference =
         reference_str
             .parse()
