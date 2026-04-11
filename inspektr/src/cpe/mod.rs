@@ -1,19 +1,35 @@
+//! CPE (Common Platform Enumeration) parsing and ecosystem resolution.
+//!
+//! Used by the NVD importer to map CVE entries (which use CPE identifiers)
+//! to the package ecosystems used by inspektr. For example, a CPE with
+//! `target_sw=node.js` maps to the npm ecosystem.
+//!
+//! The resolution strategy:
+//! 1. Parse the CPE 2.3 string into [`CpeFields`]
+//! 2. Try to resolve by `target_sw` (e.g., `node.js` -> npm)
+//! 3. Fall back to vendor-based heuristics (e.g., `djangoproject` -> PyPI)
+
 pub mod mappings;
 
 use mappings::{resolve_by_target_sw, resolve_by_vendor};
 
-/// A CPE that has been resolved to an ecosystem + package name.
+/// A CPE that has been resolved to a specific ecosystem and package name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedCpe {
+    /// The resolved ecosystem name (OSV format, e.g., `"npm"`, `"PyPI"`, `"Maven"`).
     pub ecosystem: String,
+    /// The resolved package name within the ecosystem.
     pub package_name: String,
 }
 
-/// The subset of CPE 2.3 fields we care about.
+/// The subset of CPE 2.3 fields relevant for ecosystem resolution.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CpeFields {
+    /// The vendor component (e.g., `"apache"`, `"lodash"`).
     pub vendor: String,
+    /// The product component (e.g., `"log4j"`, `"flask"`).
     pub product: String,
+    /// The target software component (e.g., `"node.js"`, `"python"`, `"*"`).
     pub target_sw: String,
 }
 

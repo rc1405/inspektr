@@ -1,3 +1,10 @@
+//! Shared OVAL XML parser for Oracle and Azure Linux feeds.
+//!
+//! Provides common parsing logic for OVAL (Open Vulnerability and Assessment
+//! Language) XML feeds used by multiple Linux distributions.
+//!
+//! Requires the `db-admin` feature.
+
 use crate::db::store::{AffectedPackage, AffectedRange, VulnRecord};
 use crate::error::DatabaseError;
 use crate::models::Severity;

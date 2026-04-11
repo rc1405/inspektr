@@ -1,8 +1,13 @@
+//! C/C++ Conan ecosystem cataloger.
+//!
+//! Discovers Conan packages from `conan.lock` files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for C/C++ Conan packages.
 pub struct ConanCataloger;
 
 impl Cataloger for ConanCataloger {

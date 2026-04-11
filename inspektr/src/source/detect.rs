@@ -1,13 +1,29 @@
+//! Target type detection for the pipeline.
+//!
+//! Determines whether a user-supplied target string refers to an OCI container
+//! image, a compiled binary, or a filesystem path. This drives the choice of
+//! [`Source`](crate::source::Source) implementation in the pipeline.
+
 use crate::oci::ImageReference;
 use std::path::Path;
 
+/// The kind of target that a user-supplied string refers to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetType {
+    /// An OCI container image reference (e.g., `docker.io/library/alpine:3.19`).
     OciImage,
+    /// A compiled binary file (ELF, Mach-O, or PE).
     Binary,
+    /// A filesystem path (directory or non-binary file).
     Filesystem,
 }
 
+/// Detect the target type from a user-supplied string.
+///
+/// Detection order:
+/// 1. If it looks like an OCI image reference (contains a registry hostname), returns [`TargetType::OciImage`]
+/// 2. If it points to an existing file with binary magic bytes, returns [`TargetType::Binary`]
+/// 3. Otherwise, returns [`TargetType::Filesystem`]
 pub fn detect_target_type(target: &str) -> TargetType {
     if ImageReference::looks_like_image_ref(target) {
         return TargetType::OciImage;
@@ -48,12 +64,25 @@ mod tests {
 
     #[test]
     fn test_detect_relative_paths_not_oci() {
-        // Relative paths with slashes must NOT be detected as OCI refs
+        // Paths where the first segment exists on disk are filesystem, not OCI
         assert_eq!(
-            detect_target_type("test-fixtures/javascript/"),
+            detect_target_type("src/models"),
             TargetType::Filesystem
         );
-        assert_eq!(detect_target_type("myorg/myrepo"), TargetType::Filesystem);
+    }
+
+    #[test]
+    fn test_detect_docker_hub_short_form() {
+        // Docker Hub short-form: user/repo:tag
+        assert_eq!(
+            detect_target_type("rc1405/inspektr-db:latest"),
+            TargetType::OciImage
+        );
+        // user/repo without tag — non-existent path treated as OCI
+        assert_eq!(
+            detect_target_type("myorg/myrepo"),
+            TargetType::OciImage
+        );
     }
 
     #[test]

@@ -1,3 +1,9 @@
+//! AWS Bottlerocket vulnerability data importer.
+//!
+//! Parses Bottlerocket `updateinfo.xml` feeds to extract vulnerability records.
+//!
+//! Requires the `db-admin` feature.
+
 use crate::db::store::{AffectedPackage, AffectedRange, VulnRecord};
 use crate::error::DatabaseError;
 use crate::models::Severity;

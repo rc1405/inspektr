@@ -1,8 +1,14 @@
+//! Alpine apk package database parser.
+//!
+//! Parses `/lib/apk/db/installed` to discover installed packages on
+//! Alpine, Wolfi, and Chainguard images.
+
 use super::{DistroInfo, OsPackageParser};
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Parser for apk package databases (Alpine, Wolfi, Chainguard).
 pub struct ApkParser;
 
 impl OsPackageParser for ApkParser {

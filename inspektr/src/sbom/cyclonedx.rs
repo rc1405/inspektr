@@ -1,3 +1,8 @@
+//! CycloneDX 1.5 JSON SBOM format.
+//!
+//! Implements encoding and decoding of SBOMs in the
+//! [CycloneDX 1.5](https://cyclonedx.org/specification/overview/) JSON format.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -26,6 +31,7 @@ struct CycloneDxComponent {
     purl: String,
 }
 
+/// CycloneDX 1.5 JSON SBOM encoder/decoder.
 pub struct CycloneDxFormat;
 
 impl SbomFormat for CycloneDxFormat {

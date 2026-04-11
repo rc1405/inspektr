@@ -1,8 +1,15 @@
+//! Azure Linux / CBL-Mariner OVAL data importer.
+//!
+//! Downloads and parses OVAL feeds for CBL-Mariner 1.0/2.0 and Azure Linux 3.0.
+//!
+//! Requires the `db-admin` feature.
+
 use crate::db::VulnSource;
 use crate::db::oval::parse_oval_xml;
 use crate::db::store::VulnStore;
 use crate::error::DatabaseError;
 
+/// Azure Linux / CBL-Mariner OVAL vulnerability data source.
 pub struct AzureLinuxSource;
 
 impl VulnSource for AzureLinuxSource {

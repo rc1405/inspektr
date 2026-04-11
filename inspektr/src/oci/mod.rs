@@ -1,12 +1,30 @@
+//! OCI registry interaction for pulling images and pushing/pulling artifacts.
+//!
+//! This module provides:
+//!
+//! - [`pull::pull_artifact()`] — pull a single-layer OCI artifact (e.g., the
+//!   vulnerability database)
+//! - [`pull::pull_and_extract_image()`] — pull and extract all files from a
+//!   container image
+//! - `push` — push artifacts to a registry (requires `db-admin` feature)
+//! - [`ImageReference`] — parse and inspect OCI image reference strings
+//! - [`RegistryAuth`] — re-exported authentication type (so consumers don't
+//!   need `oci_client` as a direct dependency)
+
 pub mod pull;
 #[cfg(feature = "db-admin")]
 pub mod push;
 
-/// Re-export RegistryAuth so consumers don't need oci_client as a direct dependency.
+/// Re-exported from `oci_client` so consumers don't need it as a direct dependency.
+///
+/// Use [`RegistryAuth::Anonymous`] for public images, or [`RegistryAuth::Basic`]
+/// with username/password for private registries.
 pub use oci_client::secrets::RegistryAuth;
 
-/// Build a `RegistryAuth` from optional username/password.
-/// If both are provided, uses Basic auth. Otherwise, anonymous.
+/// Build a [`RegistryAuth`] from optional username/password.
+///
+/// Returns [`RegistryAuth::Basic`] if both are provided, otherwise
+/// [`RegistryAuth::Anonymous`].
 pub fn build_auth(username: Option<&str>, password: Option<&str>) -> RegistryAuth {
     match (username, password) {
         (Some(u), Some(p)) => RegistryAuth::Basic(u.to_string(), p.to_string()),
@@ -14,19 +32,28 @@ pub fn build_auth(username: Option<&str>, password: Option<&str>) -> RegistryAut
     }
 }
 
-/// Parsed OCI image reference.
+/// A parsed OCI image reference.
+///
+/// Splits a reference string like `ghcr.io/myorg/myrepo:v1.2.3` into its
+/// components. Docker Hub short-form references (e.g., `ubuntu:22.04`) are
+/// expanded to their full form (`registry-1.docker.io/library/ubuntu`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImageReference {
+    /// The registry hostname (e.g., `"ghcr.io"`, `"registry-1.docker.io"`).
     pub registry: String,
+    /// The repository path (e.g., `"myorg/myrepo"`, `"library/ubuntu"`).
     pub repository: String,
+    /// The image tag (e.g., `"v1.2.3"`, `"latest"`). Defaults to `"latest"` if
+    /// neither tag nor digest is specified.
     pub tag: Option<String>,
+    /// The image digest (e.g., `"sha256:abc123..."`). Mutually exclusive with tag.
     pub digest: Option<String>,
 }
 
 impl ImageReference {
     /// Parse an OCI image reference string into its components.
     ///
-    /// Format: [registry/]repository[:tag][@digest]
+    /// Format: `[registry/]repository[:tag][@digest]`
     pub fn parse(reference: &str) -> Result<Self, String> {
         let mut remainder = reference.to_string();
 
@@ -112,12 +139,23 @@ impl ImageReference {
         }
         if let Some(slash_pos) = s.find('/') {
             let first_segment = &s[..slash_pos];
-            first_segment.contains('.') || first_segment == "localhost"
+            // Registry hostname (contains dot) or localhost
+            if first_segment.contains('.') || first_segment == "localhost" {
+                return true;
+            }
+            // Docker Hub short-form: user/repo:tag or user/repo@digest
+            let remainder = &s[slash_pos + 1..];
+            if remainder.contains(':') || remainder.contains('@') {
+                return true;
+            }
+            // user/repo without tag — check if the first segment exists
+            // as a directory on disk (filesystem path) or not (image ref)
+            !std::path::Path::new(first_segment).exists()
         } else {
             // No slash — could be a bare image name like "ubuntu" but
             // we can't distinguish from a local directory name, so
             // we require at least a tag or digest marker
-            s.contains('@')
+            s.contains('@') || s.contains(':')
         }
     }
 }
@@ -165,23 +203,24 @@ mod tests {
     #[test]
     fn test_looks_like_image_ref() {
         // Registry with dot in hostname
-        assert!(ImageReference::looks_like_image_ref(
-            "ghcr.io/myorg/myrepo:v1"
-        ));
-        assert!(ImageReference::looks_like_image_ref(
-            "docker.io/library/golang:1.21"
-        ));
+        assert!(ImageReference::looks_like_image_ref("ghcr.io/myorg/myrepo:v1"));
+        assert!(ImageReference::looks_like_image_ref("docker.io/library/golang:1.21"));
         // Localhost
         assert!(ImageReference::looks_like_image_ref("localhost/myrepo"));
         // Bare name with digest
         assert!(ImageReference::looks_like_image_ref("myrepo@sha256:abc123"));
-        // NOT image refs — these are filesystem paths
+        // Bare name with tag
+        assert!(ImageReference::looks_like_image_ref("ubuntu:22.04"));
+        // Docker Hub short-form: user/repo:tag
+        assert!(ImageReference::looks_like_image_ref("rc1405/inspektr-db:latest"));
+        assert!(ImageReference::looks_like_image_ref("myuser/myrepo:v1.0"));
+        // Docker Hub short-form with digest
+        assert!(ImageReference::looks_like_image_ref("myuser/myrepo@sha256:abc"));
+        // NOT image refs — filesystem paths
         assert!(!ImageReference::looks_like_image_ref("/absolute/path"));
         assert!(!ImageReference::looks_like_image_ref(""));
-        assert!(!ImageReference::looks_like_image_ref("myorg/myrepo")); // no dot in first segment
-        assert!(!ImageReference::looks_like_image_ref(
-            "test-fixtures/javascript/"
-        ));
         assert!(!ImageReference::looks_like_image_ref("./relative/path"));
+        // Paths where first segment exists as a directory are filesystem, not image refs
+        assert!(!ImageReference::looks_like_image_ref("src/models"));
     }
 }

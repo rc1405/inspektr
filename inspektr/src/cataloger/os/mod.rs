@@ -1,3 +1,13 @@
+//! OS-level package cataloger for container images.
+//!
+//! Detects the Linux distribution from `/etc/os-release` and dispatches to
+//! the appropriate package database parser:
+//!
+//! - [`dpkg`] — Debian, Ubuntu, Distroless
+//! - [`apk`] — Alpine, Wolfi, Chainguard
+//! - [`rpm`] — RHEL, CentOS, Rocky, Alma, Oracle, SUSE, Photon, Azure Linux,
+//!   CoreOS, Bottlerocket, Echo, MinimOS
+
 pub mod apk;
 pub mod dpkg;
 pub mod rpm;
@@ -7,28 +17,41 @@ use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 
 /// Information about the detected Linux distribution.
+///
+/// Parsed from `/etc/os-release` inside a container image.
 #[derive(Debug, Clone)]
 pub struct DistroInfo {
+    /// The distribution ID (e.g., `"alpine"`, `"debian"`, `"rhel"`).
     pub id: String,
+    /// The distribution version (e.g., `"3.19"`, `"12"`, `"9.3"`).
     pub version: String,
+    /// The human-readable distribution name.
     pub name: String,
+    /// The ecosystem this distribution maps to.
     pub ecosystem: Ecosystem,
+    /// The package format used by this distribution.
     pub package_format: PackageFormat,
 }
 
+/// The package database format used by a Linux distribution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PackageFormat {
+    /// Debian package format (`/var/lib/dpkg/status`).
     Dpkg,
+    /// Alpine package format (`/lib/apk/db/installed`).
     Apk,
+    /// RPM package format (`/var/lib/rpm/rpmdb.sqlite` or `/var/lib/rpm/Packages`).
     Rpm,
 }
 
 /// Trait for OS package database parsers.
+///
+/// Implement this trait to add support for a new OS package format.
 pub trait OsPackageParser {
-    /// File paths this parser looks for in the image.
+    /// File paths this parser looks for in container image layers.
     fn package_db_paths(&self) -> &[&str];
 
-    /// Parse the package database content into packages.
+    /// Parse packages from the package database files.
     fn parse_packages(
         &self,
         files: &[FileEntry],
@@ -36,7 +59,8 @@ pub trait OsPackageParser {
     ) -> Result<Vec<Package>, CatalogerError>;
 }
 
-/// The OS cataloger — detects distro, dispatches to appropriate package parser.
+/// The OS cataloger — detects the Linux distribution from `/etc/os-release`
+/// and dispatches to the appropriate package database parser.
 pub struct OsCataloger;
 
 impl Cataloger for OsCataloger {

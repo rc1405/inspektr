@@ -1,8 +1,14 @@
+//! Debian dpkg package database parser.
+//!
+//! Parses `/var/lib/dpkg/status` to discover installed packages on
+//! Debian, Ubuntu, and Distroless images.
+
 use super::{DistroInfo, OsPackageParser};
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Parser for dpkg package databases (Debian, Ubuntu, Distroless).
 pub struct DpkgParser;
 
 impl OsPackageParser for DpkgParser {

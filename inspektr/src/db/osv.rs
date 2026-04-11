@@ -1,3 +1,11 @@
+//! OSV (Open Source Vulnerability) data importer.
+//!
+//! Downloads and parses OSV bulk data for all supported ecosystems. OSV
+//! provides vulnerability data for both language ecosystems and OS
+//! distributions.
+//!
+//! Requires the `db-admin` feature.
+
 use crate::db::store::{AffectedPackage, AffectedRange, VulnRecord, VulnStore};
 use crate::models::Severity;
 use serde::Deserialize;
@@ -6,6 +14,7 @@ use serde::Deserialize;
 // OSV JSON schema structs
 // ---------------------------------------------------------------------------
 
+/// A single OSV vulnerability entry, as parsed from the OSV JSON format.
 #[derive(Debug, Deserialize)]
 pub struct OsvEntry {
     pub id: String,

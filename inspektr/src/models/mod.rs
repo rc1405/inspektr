@@ -1,25 +1,48 @@
+//! Core data types used throughout the library.
+//!
+//! This module defines the primary types that flow through the
+//! [pipeline](crate::pipeline): files, packages, SBOMs, ecosystems,
+//! vulnerabilities, and severity levels.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// A file discovered by a Source.
+/// A file discovered by a [`Source`](crate::source::Source).
+///
+/// Represents a single file with its path and contents. Files are classified
+/// as either text (UTF-8) or binary, which determines how catalogers process them.
+/// For example, Go binary analysis requires [`FileContents::Binary`], while
+/// lockfile parsing uses [`FileContents::Text`].
 #[derive(Debug, Clone)]
 pub struct FileEntry {
+    /// The path where this file was found (absolute for filesystem sources,
+    /// layer-relative for OCI images).
     pub path: PathBuf,
+    /// The file contents, classified as text or binary.
     pub contents: FileContents,
 }
 
+/// The contents of a discovered file.
+///
+/// Files are classified at discovery time based on a heuristic check for
+/// null bytes. Text files are decoded as UTF-8 (with lossy conversion for
+/// non-UTF-8 content).
 #[derive(Debug, Clone)]
 pub enum FileContents {
+    /// UTF-8 text content (lockfiles, manifests, config files).
     Text(String),
+    /// Raw binary content (compiled executables, compressed archives).
     Binary(Vec<u8>),
 }
 
 impl FileEntry {
+    /// Returns `true` if this file contains binary (non-text) data.
     pub fn is_binary(&self) -> bool {
         matches!(self.contents, FileContents::Binary(_))
     }
 
+    /// Returns the text content if this is a text file, or `None` for binary files.
     pub fn as_text(&self) -> Option<&str> {
         match &self.contents {
             FileContents::Text(s) => Some(s),
@@ -27,6 +50,7 @@ impl FileEntry {
         }
     }
 
+    /// Returns the raw bytes of the file content, regardless of type.
     pub fn as_bytes(&self) -> &[u8] {
         match &self.contents {
             FileContents::Text(s) => s.as_bytes(),
@@ -36,47 +60,92 @@ impl FileEntry {
 }
 
 /// Metadata about where files came from.
+///
+/// Included in every [`Sbom`] to record what was scanned.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceMetadata {
+    /// The kind of source: `"filesystem"`, `"oci"`, or `"binary"`.
     pub source_type: String,
+    /// The target that was scanned (directory path, image reference, or binary path).
     pub target: String,
 }
 
-/// Supported ecosystems.
+/// A software ecosystem that a [`Package`] belongs to.
+///
+/// Ecosystems fall into two categories:
+///
+/// - **Language ecosystems** (Go, JavaScript, Python, etc.) — packages come from
+///   lockfiles and manifests.
+/// - **OS distribution ecosystems** (Alpine, Debian, RedHat, etc.) — packages come
+///   from OS package managers (apk, dpkg, rpm) found in container images.
+///
+/// Each ecosystem maps to an OSV ecosystem name (via [`as_osv_ecosystem()`](Ecosystem::as_osv_ecosystem))
+/// and a PURL type prefix (via [`from_purl()`](Ecosystem::from_purl) and
+/// [`Package::to_purl()`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Ecosystem {
+    /// Unrecognized or unsupported ecosystem.
     Unknown,
+    /// Go modules (`go.mod`, `go.sum`, Go binaries).
     Go,
+    /// JavaScript / Node.js (`package-lock.json`, `yarn.lock`).
     JavaScript,
+    /// Python (`requirements.txt`, `Pipfile.lock`, `poetry.lock`).
     Python,
+    /// Java (`pom.xml`, `build.gradle`, `build.gradle.kts`).
     Java,
+    /// C/C++ Conan packages (`conan.lock`).
     Conan,
+    /// C/C++ vcpkg packages (`vcpkg.json`).
     Vcpkg,
+    /// .NET / NuGet (`packages.lock.json`, `*.csproj`, `packages.config`).
     DotNet,
+    /// PHP Composer (`composer.lock`).
     Php,
+    /// Rust / Cargo (`Cargo.lock`).
     Rust,
+    /// Ruby / RubyGems (`Gemfile.lock`).
     Ruby,
+    /// Swift Package Manager (`Package.resolved`).
     Swift,
     // OS distributions — apk-based
+    /// Alpine Linux (apk).
     Alpine,
+    /// Wolfi Linux (apk).
     Wolfi,
+    /// Chainguard (apk).
     Chainguard,
     // OS distributions — dpkg-based
+    /// Debian (dpkg).
     Debian,
+    /// Ubuntu (dpkg).
     Ubuntu,
+    /// Google Distroless (dpkg, maps to Debian for vulnerability data).
     Distroless,
     // OS distributions — rpm-based
+    /// Red Hat Enterprise Linux (rpm).
     RedHat,
+    /// CentOS (rpm).
     CentOS,
+    /// Rocky Linux (rpm).
     Rocky,
+    /// AlmaLinux (rpm).
     AlmaLinux,
+    /// Oracle Linux (rpm).
     OracleLinux,
+    /// SUSE Linux (rpm).
     SUSE,
+    /// VMware Photon OS (rpm).
     Photon,
+    /// Microsoft Azure Linux / CBL-Mariner (rpm).
     AzureLinux,
+    /// Fedora CoreOS (rpm).
     CoreOS,
+    /// AWS Bottlerocket (rpm).
     Bottlerocket,
+    /// Echo Linux (rpm).
     Echo,
+    /// MinimOS (rpm).
     MinimOS,
 }
 
@@ -156,6 +225,10 @@ impl Ecosystem {
         }
     }
 
+    /// Returns the OSV ecosystem name for this ecosystem.
+    ///
+    /// These names match the identifiers used by the
+    /// [OSV database](https://osv.dev/list) (e.g., `"Go"`, `"npm"`, `"PyPI"`).
     pub fn as_osv_ecosystem(&self) -> &'static str {
         match self {
             Ecosystem::Unknown => "Unknown",
@@ -193,17 +266,35 @@ impl Ecosystem {
 }
 
 /// A discovered software package.
+///
+/// Packages are produced by [`Cataloger`](crate::cataloger::Cataloger) implementations
+/// and represent a single versioned software component. Each package has a
+/// [Package URL (PURL)](https://github.com/package-url/purl-spec) for unique
+/// identification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Package {
+    /// The package name (e.g., `"express"`, `"github.com/stretchr/testify"`, `"openssl"`).
     pub name: String,
+    /// The package version string (e.g., `"4.18.2"`, `"v1.8.4"`, `"3.0.11-1~deb12u3"`).
     pub version: String,
+    /// The ecosystem this package belongs to.
     pub ecosystem: Ecosystem,
+    /// The [Package URL](https://github.com/package-url/purl-spec) for this package.
     pub purl: String,
+    /// Arbitrary metadata (e.g., `"osv_ecosystem"` for versioned OS ecosystem names).
     pub metadata: HashMap<String, String>,
+    /// The source file where this package was discovered (e.g., `"/project/go.mod"`).
     pub source_file: Option<String>,
 }
 
 impl Package {
+    /// Generate a [Package URL](https://github.com/package-url/purl-spec) string
+    /// from this package's ecosystem, name, and version.
+    ///
+    /// The PURL format varies by ecosystem. For example:
+    /// - Go: `pkg:golang/github.com/stretchr/testify@v1.8.4`
+    /// - npm: `pkg:npm/express@4.18.2`
+    /// - Debian: `pkg:deb/debian/openssl@3.0.11`
     pub fn to_purl(&self) -> String {
         match self.ecosystem {
             Ecosystem::Unknown => format!("pkg:unknown/{}@{}", self.name, self.version),
@@ -258,20 +349,35 @@ impl Package {
     }
 }
 
-/// An SBOM document.
+/// A Software Bill of Materials (SBOM) document.
+///
+/// Contains the list of packages discovered from a target along with
+/// metadata about the source that was scanned. This is the primary output of
+/// [`pipeline::generate_sbom()`](crate::pipeline::generate_sbom) and can be
+/// encoded to CycloneDX or SPDX using [`SbomFormat`](crate::sbom::SbomFormat).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sbom {
+    /// Metadata about the scanned target.
     pub source: SourceMetadata,
+    /// All packages discovered in the target.
     pub packages: Vec<Package>,
 }
 
-/// Vulnerability severity levels.
+/// Vulnerability severity levels, ordered from least to most severe.
+///
+/// Variants are ordered so that `Severity::Critical > Severity::High > ... > Severity::None`,
+/// which allows direct comparison with `<`, `>`, and `max()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Severity {
+    /// No severity assigned or unknown.
     None,
+    /// Low severity.
     Low,
+    /// Medium severity (also called "Moderate" in some databases).
     Medium,
+    /// High severity (also called "Important" in some databases).
     High,
+    /// Critical severity.
     Critical,
 }
 
@@ -294,24 +400,43 @@ impl Severity {
 }
 
 /// A vulnerability record from the database.
+///
+/// Represents a single known vulnerability (CVE, GHSA, DSA, etc.) with its
+/// severity assessment from a specific data source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vulnerability {
+    /// The vulnerability identifier (e.g., `"CVE-2023-44487"`, `"GHSA-xxxx"`, `"GO-2023-0001"`).
     pub id: String,
+    /// A short description of the vulnerability.
     pub summary: String,
+    /// The severity level.
     pub severity: Severity,
+    /// ISO 8601 timestamp when this vulnerability was first published.
     pub published: String,
+    /// ISO 8601 timestamp when this vulnerability was last modified.
     pub modified: String,
+    /// ISO 8601 timestamp if this vulnerability was withdrawn/retracted.
     pub withdrawn: Option<String>,
+    /// The data source that provided this record (e.g., `"osv"`, `"nvd"`).
     pub source: String,
+    /// CVSS v3 base score (0.0–10.0), if available.
     pub cvss_score: Option<f64>,
 }
 
 /// A match between a package and a vulnerability.
+///
+/// Produced by [`vuln::matcher::match_package()`](crate::vuln::matcher::match_package)
+/// when a package's version falls within a vulnerable range.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VulnerabilityMatch {
+    /// The affected package.
     pub package: Package,
+    /// The matched vulnerability.
     pub vulnerability: Vulnerability,
+    /// The version where the vulnerability was introduced, if known.
     pub introduced: Option<String>,
+    /// The version where the vulnerability was fixed, if known.
+    /// `None` means no fix is available yet.
     pub fixed: Option<String>,
 }
 

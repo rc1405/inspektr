@@ -1,8 +1,13 @@
+//! Swift ecosystem cataloger.
+//!
+//! Discovers Swift packages from `Package.resolved` files (v1 and v2 formats).
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for Swift packages (Swift Package Manager).
 pub struct SwiftCataloger;
 
 impl Cataloger for SwiftCataloger {

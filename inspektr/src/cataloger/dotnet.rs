@@ -1,8 +1,14 @@
+//! .NET ecosystem cataloger.
+//!
+//! Discovers NuGet packages from `packages.lock.json`, `*.csproj`, and
+//! `packages.config` files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for .NET/NuGet packages.
 pub struct DotNetCataloger;
 
 impl Cataloger for DotNetCataloger {

@@ -1,8 +1,13 @@
+//! Ruby ecosystem cataloger.
+//!
+//! Discovers Ruby gems from `Gemfile.lock` files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for Ruby gems (RubyGems).
 pub struct RubyCataloger;
 
 impl Cataloger for RubyCataloger {

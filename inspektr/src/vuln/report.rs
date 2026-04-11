@@ -1,63 +1,117 @@
+//! Vulnerability scan report generation and rendering.
+//!
+//! Builds structured [`ScanReport`] documents from vulnerability matches,
+//! merging assessments from multiple data sources (e.g., OSV and NVD) into
+//! a single report. Reports can be rendered as:
+//!
+//! - Human-readable tables via [`render_report_table()`]
+//! - JSON via [`render_report_json()`]
+
 use crate::models::{Severity, VulnerabilityMatch};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
-// New report types
+// Report types
 // ---------------------------------------------------------------------------
 
+/// A complete vulnerability scan report.
+///
+/// Contains metadata about the scan (target, tool version, severity counts)
+/// and a list of vulnerability details. This is the primary output of
+/// [`pipeline::scan_and_report()`](crate::pipeline::scan_and_report).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanReport {
+    /// Metadata about the scan itself.
     pub metadata: ScanMetadata,
+    /// Individual vulnerability findings, deduplicated across data sources.
     pub vulnerabilities: Vec<VulnDetail>,
 }
 
+/// Metadata about a vulnerability scan.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanMetadata {
+    /// The tool name (`"inspektr"`).
     pub tool: String,
+    /// The tool version.
     pub version: String,
+    /// ISO 8601 timestamp when the scan was performed.
     pub timestamp: String,
+    /// The target that was scanned.
     pub target: String,
+    /// The type of target (`"filesystem"`, `"oci"`, `"binary"`, `"sbom"`).
     pub target_type: String,
+    /// Total number of packages scanned.
     pub total_packages: usize,
+    /// Total number of unique vulnerabilities found.
     pub total_vulnerabilities: usize,
+    /// Breakdown of vulnerabilities by severity level.
     pub severity_counts: SeverityCounts,
 }
 
+/// Vulnerability counts by severity level.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SeverityCounts {
+    /// Number of critical-severity vulnerabilities.
     pub critical: usize,
+    /// Number of high-severity vulnerabilities.
     pub high: usize,
+    /// Number of medium-severity vulnerabilities.
     pub medium: usize,
+    /// Number of low-severity vulnerabilities.
     pub low: usize,
+    /// Number of vulnerabilities with no assigned severity.
     pub none: usize,
 }
 
+/// Detailed information about a single vulnerability finding.
+///
+/// When the same vulnerability (e.g., `CVE-2023-44487`) is reported by
+/// multiple data sources (OSV, NVD), their assessments are merged into the
+/// [`assessments`](VulnDetail::assessments) map.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VulnDetail {
+    /// The vulnerability identifier (e.g., `"CVE-2023-44487"`).
     pub id: String,
+    /// A short description of the vulnerability.
     pub summary: String,
+    /// The affected package name.
     pub package_name: String,
+    /// The affected package version.
     pub package_version: String,
+    /// The ecosystem name (OSV format).
     pub ecosystem: String,
+    /// The Package URL of the affected package.
     pub purl: String,
+    /// The source file where the package was discovered.
     pub source_file: Option<String>,
+    /// The version where the vulnerability was introduced.
     pub introduced: Option<String>,
+    /// The version where the vulnerability was fixed.
     pub fixed_version: Option<String>,
+    /// When the vulnerability was first published.
     pub published: String,
+    /// Severity assessments from each data source (key = source name).
     pub assessments: HashMap<String, SourceAssessment>,
 }
 
+/// A severity assessment from a single data source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceAssessment {
+    /// The severity level assigned by this source.
     pub severity: Severity,
+    /// The CVSS v3 base score (0.0–10.0), if available from this source.
     pub cvss_score: Option<f64>,
 }
 
 // ---------------------------------------------------------------------------
-// New report builder
+// Report builder
 // ---------------------------------------------------------------------------
 
+/// Build a [`ScanReport`] from vulnerability matches.
+///
+/// Deduplicates vulnerabilities by (ID, package name, package version) and
+/// merges assessments from multiple data sources into a single entry.
 pub fn build_scan_report(
     target: &str,
     target_type: &str,
@@ -145,9 +199,10 @@ pub fn build_scan_report(
 }
 
 // ---------------------------------------------------------------------------
-// Helper functions for new report types
+// Helper functions
 // ---------------------------------------------------------------------------
 
+/// Return the highest severity across all data source assessments for a vulnerability.
 pub fn highest_severity(v: &VulnDetail) -> Severity {
     v.assessments
         .values()
@@ -170,9 +225,13 @@ fn sources_list(v: &VulnDetail) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// New renderers
+// Renderers
 // ---------------------------------------------------------------------------
 
+/// Render a scan report as a human-readable ASCII table.
+///
+/// Includes a summary header with target, package count, and severity
+/// breakdown, followed by a columnar table of vulnerability details.
 pub fn render_report_table(report: &ScanReport) -> String {
     let mut output = String::new();
 
@@ -269,14 +328,16 @@ pub fn render_report_table(report: &ScanReport) -> String {
     output
 }
 
-pub fn render_report_json(report: &ScanReport) -> Result<String, crate::error::LookingGlassError> {
+/// Render a scan report as pretty-printed JSON.
+pub fn render_report_json(report: &ScanReport) -> Result<String, crate::error::InspektrError> {
     serde_json::to_string_pretty(report).map_err(|e| {
-        crate::error::LookingGlassError::SbomFormat(crate::error::SbomFormatError::EncodeFailed(
+        crate::error::InspektrError::SbomFormat(crate::error::SbomFormatError::EncodeFailed(
             e.to_string(),
         ))
     })
 }
 
+/// Return `true` if any vulnerability in the report has a severity at or above `threshold`.
 pub fn has_severity_at_or_above_report(report: &ScanReport, threshold: Severity) -> bool {
     report
         .vulnerabilities

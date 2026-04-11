@@ -1,9 +1,16 @@
+//! RPM package database parser.
+//!
+//! Parses RPM package databases (`rpmdb.sqlite` or Berkeley DB `Packages` files)
+//! to discover installed packages on RPM-based distributions (RHEL, CentOS,
+//! Rocky, Alma, Oracle, SUSE, Photon, Azure Linux, CoreOS, Bottlerocket, etc.).
+
 use super::{DistroInfo, OsPackageParser};
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 use std::io::Write as IoWrite;
 
+/// Parser for RPM package databases.
 pub struct RpmParser;
 
 impl OsPackageParser for RpmParser {

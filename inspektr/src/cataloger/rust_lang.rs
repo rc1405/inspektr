@@ -1,8 +1,13 @@
+//! Rust ecosystem cataloger.
+//!
+//! Discovers Rust crates from `Cargo.lock` files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for Rust crates (crates.io).
 pub struct RustCataloger;
 
 impl Cataloger for RustCataloger {

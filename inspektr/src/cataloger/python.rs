@@ -1,8 +1,14 @@
+//! Python ecosystem cataloger.
+//!
+//! Discovers Python packages from `requirements.txt`, `Pipfile.lock`, and
+//! `poetry.lock` files.
+
 use super::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
 
+/// Cataloger for Python packages (PyPI).
 pub struct PythonCataloger;
 
 impl Cataloger for PythonCataloger {

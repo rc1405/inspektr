@@ -1,3 +1,8 @@
+//! CPE-to-ecosystem mapping tables.
+//!
+//! Contains heuristic mappings from CPE `target_sw` fields and vendor names
+//! to package ecosystems. Used by [`resolve_cpe()`](super::resolve_cpe).
+
 use super::CpeFields;
 use super::ResolvedCpe;
 
