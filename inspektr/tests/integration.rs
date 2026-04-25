@@ -65,6 +65,7 @@ fn test_full_pipeline_go_filesystem() {
     let mut store = VulnStore::open_in_memory().expect("open in-memory DB");
     let record = VulnRecord {
         id: "GO-2024-TEST-0001".to_string(),
+        original_id: None,
         summary: "Test vulnerability in vuln-pkg".to_string(),
         severity: Severity::High,
         published: "2024-01-01T00:00:00Z".to_string(),

@@ -199,11 +199,13 @@ pub fn parse_oval_xml(
                                         introduced: Some("0".to_string()),
                                         fixed: Some(pkg_ver.clone()),
                                     }],
+                                    severity_override: None,
                                 })
                                 .collect();
 
                             records.push(VulnRecord {
                                 id: cve_id.clone(),
+                                original_id: None,
                                 summary: title.clone(),
                                 severity,
                                 published: published.clone(),

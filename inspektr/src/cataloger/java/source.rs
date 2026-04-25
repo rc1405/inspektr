@@ -1,9 +1,10 @@
-//! Java ecosystem cataloger.
+//! Java source-file cataloger.
 //!
 //! Discovers Java/Maven packages from `pom.xml`, `build.gradle`, and
-//! `build.gradle.kts` files.
+//! `build.gradle.kts` files. Compiled JAR/WAR/EAR archives are handled
+//! by the sibling `archive` module.
 
-use super::Cataloger;
+use crate::cataloger::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;

@@ -29,7 +29,13 @@ impl Cataloger for GoCataloger {
 
     fn catalog(&self, files: &[FileEntry]) -> Result<Vec<Package>, CatalogerError> {
         let mut packages = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+
+        // Manifest/lockfile scans share a dedup set: a `go.sum` typically
+        // lists every version in `go.mod` plus transitive test deps, and
+        // both files describe the same logical project. Deduping across
+        // them avoids one module showing up twice from the same project.
+        let mut manifest_seen: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         for file in files {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -40,7 +46,7 @@ impl Cataloger for GoCataloger {
                             .insert("source".to_string(), "go.mod".to_string());
                         pkg.source_file = Some(file.path.display().to_string());
                         let key = format!("{}@{}", pkg.name, pkg.version);
-                        if seen.insert(key) {
+                        if manifest_seen.insert(key) {
                             packages.push(pkg);
                         }
                     }
@@ -52,7 +58,7 @@ impl Cataloger for GoCataloger {
                             .insert("source".to_string(), "go.sum".to_string());
                         pkg.source_file = Some(file.path.display().to_string());
                         let key = format!("{}@{}", pkg.name, pkg.version);
-                        if seen.insert(key) {
+                        if manifest_seen.insert(key) {
                             packages.push(pkg);
                         }
                     }
@@ -60,20 +66,55 @@ impl Cataloger for GoCataloger {
             }
         }
 
-        // Scan Go binaries for embedded build info
+        // Go binary scans: preserve per-binary attribution.
+        //
+        // Each binary is a distinct remediation target — a CVE in
+        // `golang.org/x/net` inside `mongostat` is a different fix than
+        // the same CVE inside an unrelated tool. Deduping across binaries
+        // loses that mapping, so we emit one package entry per module per
+        // binary and rely on `source_file` to tell them apart.
+        //
+        // Within a single binary we still dedupe, since Go's buildinfo
+        // format already emits each module once — but a defensive set
+        // avoids inflating counts if a binary somehow contains a
+        // duplicate line.
         for file in files {
-            if is_go_binary(file) {
-                if let Some(text) = extract_buildinfo_from_binary(file.as_bytes()) {
-                    for mut pkg in parse_buildinfo_text(&text)? {
-                        pkg.metadata
-                            .insert("source".to_string(), "binary".to_string());
-                        pkg.source_file = Some(file.path.display().to_string());
-                        let key = format!("{}@{}", pkg.name, pkg.version);
-                        if seen.insert(key) {
-                            packages.push(pkg);
-                        }
-                    }
+            if !is_go_binary(file) {
+                continue;
+            }
+            let raw_bytes = file.as_bytes();
+            let Some(text) = extract_buildinfo_from_binary(raw_bytes) else {
+                continue;
+            };
+            let mut binary_seen: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let source_file = file.path.display().to_string();
+
+            if let Some(go_ver) = extract_go_version(raw_bytes) {
+                let version = go_ver.strip_prefix("go").unwrap_or(&go_ver);
+                let key = format!("stdlib@{}", version);
+                if binary_seen.insert(key) {
+                    let purl = format!("pkg:golang/stdlib@v{}", version);
+                    packages.push(Package {
+                        name: "stdlib".to_string(),
+                        version: format!("v{}", version),
+                        ecosystem: Ecosystem::Go,
+                        purl,
+                        metadata: HashMap::from([("source".to_string(), "binary".to_string())]),
+                        source_file: Some(source_file.clone()),
+                    });
                 }
+            }
+
+            for mut pkg in parse_buildinfo_text(&text)? {
+                let key = format!("{}@{}", pkg.name, pkg.version);
+                if !binary_seen.insert(key) {
+                    continue;
+                }
+                pkg.metadata
+                    .insert("source".to_string(), "binary".to_string());
+                pkg.source_file = Some(source_file.clone());
+                packages.push(pkg);
             }
         }
 
@@ -95,45 +136,78 @@ fn contains_subsequence(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|w| w == needle)
 }
 
+/// Extract the Go toolchain version from a binary's buildinfo header.
+///
+/// The version string (e.g., `go1.21.8`) is embedded in the header bytes
+/// between the magic marker and the module text. We scan a bounded window
+/// for the `go1.` prefix and read until the next non-version byte.
+pub fn extract_go_version(bytes: &[u8]) -> Option<String> {
+    let magic = GO_BUILDINFO_MAGIC;
+    let pos = bytes.windows(magic.len()).position(|w| w == magic)?;
+    let search_end = (pos + magic.len() + 512).min(bytes.len());
+    let region = &bytes[pos..search_end];
+    let marker = b"go1.";
+    let idx = region.windows(marker.len()).position(|w| w == marker)?;
+    let start = idx;
+    let version_bytes = &region[start..];
+    let end = version_bytes
+        .iter()
+        .position(|&b| !b.is_ascii_alphanumeric() && b != b'.')
+        .unwrap_or(version_bytes.len());
+    let version = std::str::from_utf8(&version_bytes[..end]).ok()?;
+    if version.len() >= 4 {
+        Some(version.to_string())
+    } else {
+        None
+    }
+}
+
 /// Finds the Go buildinfo magic marker in raw bytes, then locates the
 /// embedded module info text (which starts with "path\t" or "mod\t")
 /// and extracts it up to the first null byte.
 ///
 /// Go's buildinfo format has a structured header between the magic marker
 /// and the actual module text. The header contains flags, pointers, and
-/// the Go version string. We skip past it by searching for the text markers.
+/// the Go version string. We skip past it by searching for the text markers,
+/// then read the full text block (which can be many KB for binaries with
+/// hundreds of dependencies).
 pub fn extract_buildinfo_from_binary(bytes: &[u8]) -> Option<String> {
     let magic = GO_BUILDINFO_MAGIC;
     let pos = bytes.windows(magic.len()).position(|w| w == magic)?;
 
-    // Search within a reasonable range after the magic (the header + text
-    // is typically within a few hundred bytes, but we allow up to 4KB)
-    let search_end = (pos + 4096).min(bytes.len());
-    let search_region = &bytes[pos..search_end];
+    let magic_end = pos + magic.len();
 
-    // Find where the module info text starts (always begins with "path\t" or "mod\t")
+    // Scan a bounded window just past the magic to locate the start of the
+    // human-readable module text. Go's buildinfo header between the magic
+    // and the text is small (flags + pointers + version string), so 4KB is
+    // more than enough. We only use this window to find the offset —
+    // reading the text itself uses the full binary so large dep lists are
+    // not truncated.
+    let header_search_end = (magic_end + 4096).min(bytes.len());
+    let header_region = &bytes[magic_end..header_search_end];
+
     let text_markers: &[&[u8]] = &[b"path\t", b"mod\t"];
-    let text_start = text_markers
+    let text_start_in_header = text_markers
         .iter()
-        .filter_map(|marker| {
-            search_region
-                .windows(marker.len())
-                .position(|w| w == *marker)
-        })
+        .filter_map(|marker| header_region.windows(marker.len()).position(|w| w == *marker))
         .min()?;
 
-    let text_bytes = &search_region[text_start..];
+    let text_start_abs = magic_end + text_start_in_header;
+    let text_region = &bytes[text_start_abs..];
 
-    // Read until we hit a null byte
-    let end = text_bytes
+    // Go's buildinfo text block is null-terminated. Large binaries like
+    // `grafana` can have hundreds of `dep\t...` lines totaling many KB, so
+    // we must NOT cap this search — earlier versions limited it to 4KB and
+    // truncated at ~40 deps.
+    let end = text_region
         .iter()
         .position(|&b| b == 0)
-        .unwrap_or(text_bytes.len());
+        .unwrap_or(text_region.len());
 
     // The region before the null may contain trailing non-UTF8 bytes
     // (Go's encoding can place binary data after the text block).
     // Use lossy conversion and trim to the last complete line.
-    let text = String::from_utf8_lossy(&text_bytes[..end]);
+    let text = String::from_utf8_lossy(&text_region[..end]);
     if let Some(last_newline) = text.rfind('\n') {
         Some(text[..=last_newline].to_string())
     } else {
@@ -153,7 +227,7 @@ pub fn parse_buildinfo_text(text: &str) -> Result<Vec<Package>, CatalogerError> 
                 let name = parts[0].trim().to_string();
                 let version = parts[1].trim().to_string();
                 if !name.is_empty() && !version.is_empty() {
-                    let purl = format!("pkg:golang/{}@{}", name, version);
+                    let purl = format!("pkg:golang/{}@{}", name.to_lowercase(), version);
                     packages.push(Package {
                         name,
                         version,
@@ -219,7 +293,7 @@ pub fn parse_require_line(line: &str) -> Option<Package> {
         return None;
     }
 
-    let purl = format!("pkg:golang/{}@{}", name, version);
+    let purl = format!("pkg:golang/{}@{}", name.to_lowercase(), version);
     Some(Package {
         name,
         version,
@@ -260,7 +334,7 @@ pub fn parse_go_sum(text: &str) -> Result<Vec<Package>, CatalogerError> {
 
         let key = format!("{}@{}", name, version);
         if seen.insert(key) {
-            let purl = format!("pkg:golang/{}@{}", name, version);
+            let purl = format!("pkg:golang/{}@{}", name.to_lowercase(), version);
             packages.push(Package {
                 name,
                 version,
@@ -477,6 +551,27 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
             pkgs.iter()
                 .all(|p| p.metadata.get("source").map(|s| s.as_str()) == Some("binary"))
         );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "stdlib" && p.version == "v1.21.0" && p.purl == "pkg:golang/stdlib@v1.21.0"),
+            "should emit stdlib package from Go version in binary header"
+        );
+    }
+
+    #[test]
+    fn test_extract_go_version() {
+        let mut bytes: Vec<u8> = vec![0u8; 50];
+        bytes.extend_from_slice(GO_BUILDINFO_MAGIC);
+        bytes.extend_from_slice(&[0x08, 0x02, 0x00, 0x00]);
+        bytes.extend_from_slice(b"go1.21.8");
+        bytes.extend_from_slice(&[0x00; 20]);
+        assert_eq!(extract_go_version(&bytes), Some("go1.21.8".to_string()));
+    }
+
+    #[test]
+    fn test_extract_go_version_none_without_magic() {
+        let bytes = vec![0u8; 100];
+        assert_eq!(extract_go_version(&bytes), None);
     }
 
     #[test]

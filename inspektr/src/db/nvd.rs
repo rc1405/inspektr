@@ -114,6 +114,8 @@ pub struct NvdDescription {
 #[serde(rename_all = "camelCase")]
 pub struct NvdMetrics {
     #[serde(default)]
+    pub cvss_metric_v40: Vec<NvdCvssV4>,
+    #[serde(default)]
     pub cvss_metric_v31: Vec<NvdCvssV3>,
     #[serde(default)]
     pub cvss_metric_v30: Vec<NvdCvssV3>,
@@ -137,9 +139,32 @@ pub struct NvdCvssV3Data {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NvdCvssV4 {
+    pub cvss_data: NvdCvssV4Data,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NvdCvssV4Data {
+    pub base_severity: String,
+    #[serde(default)]
+    pub base_score: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NvdCvssV2 {
     #[serde(default)]
     pub base_severity: String,
+    #[serde(default)]
+    pub cvss_data: Option<NvdCvssV2Data>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NvdCvssV2Data {
+    #[serde(default)]
+    pub base_score: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,7 +196,9 @@ pub struct NvdCpeMatch {
 // ---------------------------------------------------------------------------
 
 fn extract_severity(cve: &NvdCve) -> Severity {
-    // Prefer V3.1, fall back to V3.0, then V2.
+    if let Some(m) = cve.metrics.cvss_metric_v40.first() {
+        return Severity::parse(&m.cvss_data.base_severity);
+    }
     if let Some(m) = cve.metrics.cvss_metric_v31.first() {
         return Severity::parse(&m.cvss_data.base_severity);
     }
@@ -185,11 +212,17 @@ fn extract_severity(cve: &NvdCve) -> Severity {
 }
 
 fn extract_cvss_score(cve: &NvdCve) -> Option<f64> {
+    if let Some(m) = cve.metrics.cvss_metric_v40.first() {
+        return m.cvss_data.base_score;
+    }
     if let Some(m) = cve.metrics.cvss_metric_v31.first() {
         return m.cvss_data.base_score;
     }
     if let Some(m) = cve.metrics.cvss_metric_v30.first() {
         return m.cvss_data.base_score;
+    }
+    if let Some(m) = cve.metrics.cvss_metric_v2.first() {
+        return m.cvss_data.as_ref().and_then(|d| d.base_score);
     }
     None
 }
@@ -259,11 +292,13 @@ fn cve_to_vuln_records(cve: &NvdCve, ecosystem_filter: Option<&str>) -> Vec<Vuln
             ecosystem,
             package_name,
             ranges,
-        })
+        severity_override: None,
+                })
         .collect();
 
     vec![VulnRecord {
         id: cve.id.clone(),
+        original_id: None,
         summary,
         severity,
         published: cve.published.clone(),
@@ -296,15 +331,19 @@ impl NvdClient {
             eprintln!("nvd: NVD_API_KEY not set, using slower rate limit (5 req/30s)");
             5
         };
+        let http = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .unwrap_or_else(|_| reqwest::blocking::Client::new());
         Self {
-            http: reqwest::blocking::Client::new(),
+            http,
             api_key,
             rate_limiter: RateLimiter::new(max_requests, 30),
         }
     }
 
-    /// Maximum number of retries for transient errors (429, body decode, parse).
-    const MAX_RETRIES: u32 = 5;
+    /// Maximum number of retries for transient errors (429, 503, body decode, parse).
+    const MAX_RETRIES: u32 = 8;
     /// Base backoff duration in seconds (doubles each attempt).
     const RETRY_BACKOFF_SECS: u64 = 30;
 
@@ -346,29 +385,44 @@ impl NvdClient {
                 ));
             }
 
-            // 429 — rate limited, retry
-            if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                last_error = "rate limited (429)".to_string();
+            // Non-success HTTP status — log the response body for diagnostics
+            let status = response.status();
+            if !status.is_success() {
+                let body = response.text().unwrap_or_default();
+                let body_preview = if body.len() > 300 {
+                    &body[..300]
+                } else {
+                    &body
+                };
+                last_error = format!(
+                    "NVD API returned HTTP {} (startIndex={}): {}",
+                    status, start_index, body_preview
+                );
+                if status == reqwest::StatusCode::FORBIDDEN {
+                    return Err(DatabaseError::ImportFailed(format!(
+                        "NVD API key rejected (HTTP 403): {}",
+                        body_preview
+                    )));
+                }
                 retry_with_backoff(attempt, &last_error);
                 continue;
             }
 
-            // Other non-success HTTP status — retry (could be 500, 503, etc.)
-            if !response.status().is_success() {
-                last_error = format!("NVD API returned HTTP {}", response.status());
-                retry_with_backoff(attempt, &last_error);
-                continue;
-            }
-
-            // Read response body — retry on decode errors
-            let text = match response.text() {
-                Ok(t) => t,
+            // Read response body as raw bytes, then convert to string.
+            // Using bytes() instead of text() avoids reqwest's internal
+            // decoding which can fail opaquely on connection resets.
+            let bytes = match response.bytes() {
+                Ok(b) => b,
                 Err(e) => {
-                    last_error = format!("Failed to read NVD response body: {}", e);
+                    last_error = format!(
+                        "Failed to read NVD response body (startIndex={}): {}",
+                        start_index, e
+                    );
                     retry_with_backoff(attempt, &last_error);
                     continue;
                 }
             };
+            let text = String::from_utf8_lossy(&bytes).into_owned();
 
             // Parse JSON — retry on parse errors (could be truncated response)
             match serde_json::from_str::<NvdResponse>(&text) {
@@ -452,6 +506,14 @@ impl VulnSource for NvdSource {
             }
             total_imported += count;
 
+            for vuln in &response.vulnerabilities {
+                let sev = extract_severity(&vuln.cve);
+                let cvss = extract_cvss_score(&vuln.cve);
+                if sev != Severity::None {
+                    store.insert_severity_index(&vuln.cve.id, sev, cvss);
+                }
+            }
+
             start_index += page_size;
             if start_index >= total_results {
                 break;
@@ -476,12 +538,142 @@ impl VulnSource for NvdSource {
 fn retry_with_backoff(attempt: u32, reason: &str) {
     let wait_secs = 30u64 * 2u64.pow(attempt);
     eprintln!(
-        "nvd: {} — waiting {}s before retry ({}/5)...",
+        "nvd: {} — waiting {}s before retry ({}/8)...",
         reason,
         wait_secs,
         attempt + 1,
     );
     std::thread::sleep(Duration::from_secs(wait_secs));
+}
+
+// ---------------------------------------------------------------------------
+// GitHub NVD mirror source (fkie-cad/nvd-json-data-feeds)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "db-admin")]
+const NVD_GITHUB_RELEASE_URL: &str =
+    "https://github.com/fkie-cad/nvd-json-data-feeds/releases/latest/download";
+
+#[cfg(feature = "db-admin")]
+#[derive(Debug, Deserialize)]
+struct NvdGithubFeed {
+    #[serde(default)]
+    cve_items: Vec<NvdCve>,
+}
+
+#[cfg(feature = "db-admin")]
+pub struct NvdGithubSource;
+
+#[cfg(feature = "db-admin")]
+impl VulnSource for NvdGithubSource {
+    fn name(&self) -> &str {
+        "nvd-github"
+    }
+
+    fn import(
+        &self,
+        store: &mut VulnStore,
+        ecosystem: Option<&str>,
+    ) -> Result<usize, DatabaseError> {
+        let start_year = 1999u32;
+        let current_year = {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let secs = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            (1970 + secs / 31_536_000) as u32
+        };
+        let mut total_imported = 0usize;
+        let mut total_cves = 0usize;
+
+        let http = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .unwrap_or_else(|_| reqwest::blocking::Client::new());
+
+        for year in start_year..=current_year {
+            let filename = format!("CVE-{}.json.xz", year);
+            let url = format!("{}/{}", NVD_GITHUB_RELEASE_URL, filename);
+            eprintln!("nvd-github: downloading {}...", filename);
+
+            let response = http.get(&url).send().map_err(|e| {
+                DatabaseError::ImportFailed(format!("Failed to download {}: {}", filename, e))
+            })?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                eprintln!(
+                    "nvd-github: warning: {} returned HTTP {} — skipping",
+                    filename, status
+                );
+                continue;
+            }
+
+            let compressed = response.bytes().map_err(|e| {
+                DatabaseError::ImportFailed(format!(
+                    "Failed to read response body for {}: {}",
+                    filename, e
+                ))
+            })?;
+
+            let decompressed = {
+                use std::io::Read;
+                let mut decoder = xz2::read::XzDecoder::new(compressed.as_ref());
+                let mut buf = Vec::new();
+                decoder.read_to_end(&mut buf).map_err(|e| {
+                    DatabaseError::ImportFailed(format!(
+                        "Failed to decompress {}: {}",
+                        filename, e
+                    ))
+                })?;
+                buf
+            };
+
+            let feed: NvdGithubFeed = serde_json::from_slice(&decompressed).map_err(|e| {
+                DatabaseError::ImportFailed(format!("Failed to parse {}: {}", filename, e))
+            })?;
+
+            let year_cves = feed.cve_items.len();
+            total_cves += year_cves;
+
+            let mut records = Vec::new();
+            for cve in &feed.cve_items {
+                records.extend(cve_to_vuln_records(cve, ecosystem));
+            }
+
+            let count = records.len();
+            if !records.is_empty() {
+                store.insert_vulnerabilities(&records)?;
+            }
+            total_imported += count;
+
+            for cve in &feed.cve_items {
+                let sev = extract_severity(cve);
+                let cvss = extract_cvss_score(cve);
+                if sev != Severity::None {
+                    store.insert_severity_index(&cve.id, sev, cvss);
+                }
+            }
+
+            eprintln!(
+                "nvd-github: {} — {} CVEs, {} imported",
+                filename, year_cves, count
+            );
+        }
+
+        let match_rate = if total_cves > 0 {
+            (total_imported as f64 / total_cves as f64 * 100.0) as u32
+        } else {
+            0
+        };
+        eprintln!(
+            "nvd-github: imported {} vulns from {} CVEs ({}% resolved to known ecosystems)",
+            total_imported, total_cves, match_rate
+        );
+
+        Ok(total_imported)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -528,6 +720,7 @@ mod tests {
             published: String::new(),
             last_modified: String::new(),
             metrics: NvdMetrics {
+                cvss_metric_v40: vec![],
                 cvss_metric_v31: vec![NvdCvssV3 {
                     cvss_data: NvdCvssV3Data {
                         base_severity: "CRITICAL".to_string(),
@@ -551,10 +744,12 @@ mod tests {
             published: String::new(),
             last_modified: String::new(),
             metrics: NvdMetrics {
+                cvss_metric_v40: vec![],
                 cvss_metric_v31: vec![],
                 cvss_metric_v30: vec![],
                 cvss_metric_v2: vec![NvdCvssV2 {
                     base_severity: "HIGH".to_string(),
+                    cvss_data: None,
                 }],
             },
             configurations: vec![],

@@ -22,3 +22,6 @@ target
 
 # MkDocs generated site
 website/site/
+
+# Benchmark results (ephemeral)
+benchmarks/results/

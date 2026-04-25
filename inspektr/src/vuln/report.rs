@@ -122,10 +122,19 @@ pub fn build_scan_report(
     let mut index: HashMap<(String, String, String), usize> = HashMap::new();
 
     for m in matches {
+        // Strip Debian epoch from version for dedup — binary packages from
+        // the same source can have different epochs (e.g., "1:2.41-5" vs
+        // "2.41-5") but represent the same upstream version.
+        let dedup_version = match m.package.version.find(':') {
+            Some(pos) if m.package.version[..pos].bytes().all(|b| b.is_ascii_digit()) => {
+                m.package.version[pos + 1..].to_string()
+            }
+            _ => m.package.version.clone(),
+        };
         let key = (
             m.vulnerability.id.clone(),
             m.package.name.clone(),
-            m.package.version.clone(),
+            dedup_version,
         );
 
         if let Some(&idx) = index.get(&key) {

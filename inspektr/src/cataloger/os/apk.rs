@@ -21,15 +21,27 @@ impl OsPackageParser for ApkParser {
         files: &[FileEntry],
         distro: &DistroInfo,
     ) -> Result<Vec<Package>, CatalogerError> {
+        // Multi-layer alpine images ship a copy of `/lib/apk/db/installed`
+        // in every layer that ran apk. Each copy is a complete snapshot.
+        // Pick the largest one (most packages) since Docker daemon
+        // exports may return layers in non-manifest order.
+        let mut best: Option<&str> = None;
+        let mut best_len: usize = 0;
         for file in files {
             let path_str = file.path.to_string_lossy();
             if path_str.ends_with("/lib/apk/db/installed") || path_str == "lib/apk/db/installed" {
                 if let Some(text) = file.as_text() {
-                    return parse_apk_installed(text, distro);
+                    if text.len() > best_len {
+                        best = Some(text);
+                        best_len = text.len();
+                    }
                 }
             }
         }
-        Ok(Vec::new())
+        match best {
+            Some(text) => parse_apk_installed(text, distro),
+            None => Ok(Vec::new()),
+        }
     }
 }
 

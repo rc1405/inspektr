@@ -48,6 +48,14 @@ struct SpdxPackage {
     download_location: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     external_refs: Vec<SpdxExternalRef>,
+    /// Package-level SPDX annotations.
+    ///
+    /// Used to round-trip inspektr-specific metadata (e.g. `osv_ecosystem`
+    /// for OS packages) across an SBOM encode/decode. SPDX `annotations` is
+    /// the spec-supported way to attach tool-specific key/value data to a
+    /// package without polluting standard fields.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    annotations: Vec<SpdxAnnotation>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +65,19 @@ struct SpdxExternalRef {
     reference_type: String,
     reference_locator: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SpdxAnnotation {
+    annotation_date: String,
+    annotation_type: String,
+    annotator: String,
+    comment: String,
+}
+
+/// Annotator identifier inspektr uses for its own metadata annotations.
+/// Decoders check this to avoid interpreting annotations from other tools.
+const INSPEKTR_ANNOTATOR: &str = "Tool: inspektr";
 
 // ---------------------------------------------------------------------------
 // SbomFormat implementation
@@ -71,24 +92,53 @@ impl SbomFormat for SpdxFormat {
     }
 
     fn encode(&self, sbom: &Sbom) -> Result<Vec<u8>, SbomFormatError> {
+        let now = chrono_now();
         let packages: Vec<SpdxPackage> = sbom
             .packages
             .iter()
             .enumerate()
-            .map(|(i, pkg)| SpdxPackage {
-                spdx_id: format!("SPDXRef-Package-{}", i),
-                name: pkg.name.clone(),
-                version_info: pkg.version.clone(),
-                download_location: "NOASSERTION".to_string(),
-                external_refs: vec![SpdxExternalRef {
-                    reference_category: "PACKAGE-MANAGER".to_string(),
-                    reference_type: "purl".to_string(),
-                    reference_locator: pkg.purl.clone(),
-                }],
+            .map(|(i, pkg)| {
+                // Serialize metadata entries as SPDX annotations so they
+                // survive a roundtrip. Each annotation's comment is a
+                // `inspektr:<key>=<value>` string, scoped by the
+                // `INSPEKTR_ANNOTATOR` annotator so we ignore foreign
+                // annotations on decode.
+                let mut annotations: Vec<SpdxAnnotation> = pkg
+                    .metadata
+                    .iter()
+                    .map(|(k, v)| SpdxAnnotation {
+                        annotation_date: now.clone(),
+                        annotation_type: "OTHER".to_string(),
+                        annotator: INSPEKTR_ANNOTATOR.to_string(),
+                        comment: format!("inspektr:{}={}", k, v),
+                    })
+                    .collect();
+                // Preserve `source_file` so per-binary remediation survives
+                // a roundtrip (e.g., the same Go module in two binaries).
+                if let Some(sf) = &pkg.source_file {
+                    annotations.push(SpdxAnnotation {
+                        annotation_date: now.clone(),
+                        annotation_type: "OTHER".to_string(),
+                        annotator: INSPEKTR_ANNOTATOR.to_string(),
+                        comment: format!("inspektr:source_file={}", sf),
+                    });
+                }
+                annotations.sort_by(|a, b| a.comment.cmp(&b.comment));
+                SpdxPackage {
+                    spdx_id: format!("SPDXRef-Package-{}", i),
+                    name: pkg.name.clone(),
+                    version_info: pkg.version.clone(),
+                    download_location: "NOASSERTION".to_string(),
+                    external_refs: vec![SpdxExternalRef {
+                        reference_category: "PACKAGE-MANAGER".to_string(),
+                        reference_type: "purl".to_string(),
+                        reference_locator: pkg.purl.clone(),
+                    }],
+                    annotations,
+                }
             })
             .collect();
 
-        let now = chrono_now();
         let doc = SpdxDocument {
             spdx_version: "SPDX-2.3".to_string(),
             data_license: "CC0-1.0".to_string(),
@@ -123,13 +173,35 @@ impl SbomFormat for SpdxFormat {
 
                 let ecosystem = Ecosystem::from_purl(&purl);
 
+                // Recover inspektr-authored annotations from a prior encode.
+                // Foreign annotations (other annotators) are ignored — we
+                // don't want to treat third-party comments as our own
+                // metadata. `source_file` is pulled out into the dedicated
+                // Package field rather than left in metadata.
+                let mut metadata: HashMap<String, String> = HashMap::new();
+                let mut source_file: Option<String> = None;
+                for ann in &sp.annotations {
+                    if ann.annotator != INSPEKTR_ANNOTATOR {
+                        continue;
+                    }
+                    if let Some(rest) = ann.comment.strip_prefix("inspektr:") {
+                        if let Some((key, value)) = rest.split_once('=') {
+                            if key == "source_file" {
+                                source_file = Some(value.to_string());
+                            } else {
+                                metadata.insert(key.to_string(), value.to_string());
+                            }
+                        }
+                    }
+                }
+
                 Package {
                     name: sp.name,
                     version: sp.version_info,
                     ecosystem,
                     purl,
-                    metadata: HashMap::new(),
-                    source_file: None,
+                    metadata,
+                    source_file,
                 }
             })
             .collect();
