@@ -262,7 +262,13 @@ fn match_os_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityMa
     // Matches found via the source name use the source package identity so
     // the report-layer dedup (keyed by vuln_id + package_name + version)
     // collapses them across sibling binary packages.
-    let source_pkg = package.metadata.get("source_package");
+    // Skip source-package lookup for the "linux" kernel source package
+    // unless the binary IS the kernel (linux-image-*). The linux source
+    // produces thousands of kernel CVEs that don't apply to userspace
+    // packages like linux-libc-dev (just headers).
+    let source_pkg = package.metadata.get("source_package").filter(|s| {
+        s.as_str() != "linux" || package.name.starts_with("linux-image")
+    });
     let mut source_result_ids: std::collections::HashSet<String> =
         std::collections::HashSet::new();
     if let Some(src) = source_pkg {

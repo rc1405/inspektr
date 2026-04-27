@@ -11,7 +11,7 @@ VULN_SCANNERS_SBOM=("grype" "trivy" "inspektr")
 VULN_SCANNERS_DIRECT=("trivy" "inspektr")
 
 # Number of runs per tool per image
-NUM_RUNS=1
+NUM_RUNS=5
 
 # Target images — pinned to SHA256 digests for reproducibility
 # Digests resolved on 2026-04-10

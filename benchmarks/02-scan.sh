@@ -57,6 +57,11 @@ timed_run() {
         error_msg="$(grep -v -E '(Command being timed|User time|System time|Percent of CPU|Elapsed|Maximum resident|Average |Major |Minor |Voluntary|Involuntary|Swaps|File system|Socket|Signals|Page size|Exit status)' "${timing_stderr}" | head -5 | tr '\n' ' ')"
     fi
 
+    # Ensure numeric values have leading zeros (bc outputs ".17" not "0.17")
+    wall_seconds="$(printf '%g' "${wall_seconds}" 2>/dev/null || echo "0")"
+    user_time="$(printf '%g' "${user_time}" 2>/dev/null || echo "0")"
+    sys_time="$(printf '%g' "${sys_time}" 2>/dev/null || echo "0")"
+
     mkdir -p "$(dirname "${timing_output}")"
     cat > "${timing_output}" <<ENDJSON
 {
@@ -98,6 +103,11 @@ run_scan() {
     fi
 
     echo "  [${category}] ${tool} | ${slug} | run ${run_num}"
+
+    # Clear trivy scan cache before each trivy run so timing isn't inflated
+    if [[ "${tool}" == "trivy" ]]; then
+        trivy clean --scan-cache 2>/dev/null || true
+    fi
 
     case "${category}:${tool}" in
         sbom-gen:syft)

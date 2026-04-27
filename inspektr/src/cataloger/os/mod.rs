@@ -279,7 +279,9 @@ pub fn versioned_osv_ecosystem(distro: &DistroInfo) -> String {
             } else {
                 distro.version.clone()
             };
-            let is_lts = distro.name.contains("LTS");
+            // Detect LTS from the distro name ("Ubuntu 22.04.5 LTS") or
+            // from the version number: even year + .04 = LTS release.
+            let is_lts = distro.name.contains("LTS") || is_ubuntu_lts_version(&ver);
             if is_lts {
                 format!("{}:{}:LTS", base, ver)
             } else {
@@ -292,6 +294,17 @@ pub fn versioned_osv_ecosystem(distro: &DistroInfo) -> String {
             format!("{}:{}", base, major)
         }
     }
+}
+
+/// Ubuntu LTS releases are even-numbered years with .04 suffix.
+fn is_ubuntu_lts_version(version: &str) -> bool {
+    let parts: Vec<&str> = version.split('.').collect();
+    if parts.len() >= 2 && parts[1] == "04" {
+        if let Ok(year) = parts[0].parse::<u32>() {
+            return year % 2 == 0;
+        }
+    }
+    false
 }
 
 #[cfg(test)]
