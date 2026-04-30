@@ -90,7 +90,7 @@ echo "  trivy db download..."
 trivy image --download-db-only 2>/dev/null || trivy --download-db-only 2>/dev/null || echo "WARN: trivy db download may have failed"
 
 echo "  inspektr db update..."
-# "${INSPEKTR_BIN}" db update
+"${INSPEKTR_BIN}" db update
 
 # --- Record environment metadata ---
 
