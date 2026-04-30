@@ -34,8 +34,7 @@ impl Cataloger for GoCataloger {
         // lists every version in `go.mod` plus transitive test deps, and
         // both files describe the same logical project. Deduping across
         // them avoids one module showing up twice from the same project.
-        let mut manifest_seen: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        let mut manifest_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for file in files {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -189,7 +188,11 @@ pub fn extract_buildinfo_from_binary(bytes: &[u8]) -> Option<String> {
     let text_markers: &[&[u8]] = &[b"path\t", b"mod\t"];
     let text_start_in_header = text_markers
         .iter()
-        .filter_map(|marker| header_region.windows(marker.len()).position(|w| w == *marker))
+        .filter_map(|marker| {
+            header_region
+                .windows(marker.len())
+                .position(|w| w == *marker)
+        })
         .min()?;
 
     let text_start_abs = magic_end + text_start_in_header;
@@ -552,8 +555,9 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
                 .all(|p| p.metadata.get("source").map(|s| s.as_str()) == Some("binary"))
         );
         assert!(
-            pkgs.iter()
-                .any(|p| p.name == "stdlib" && p.version == "v1.21.0" && p.purl == "pkg:golang/stdlib@v1.21.0"),
+            pkgs.iter().any(|p| p.name == "stdlib"
+                && p.version == "v1.21.0"
+                && p.purl == "pkg:golang/stdlib@v1.21.0"),
             "should emit stdlib package from Go version in binary header"
         );
     }

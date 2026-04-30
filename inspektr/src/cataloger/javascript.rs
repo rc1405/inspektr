@@ -398,18 +398,30 @@ lodash@^4.17.0:
 
     #[test]
     fn test_is_node_modules_package_json_positive() {
-        assert!(is_node_modules_package_json("usr/local/lib/node_modules/npm/package.json"));
-        assert!(is_node_modules_package_json("node_modules/express/package.json"));
-        assert!(is_node_modules_package_json("/app/node_modules/@types/node/package.json"));
-        assert!(is_node_modules_package_json("usr/local/lib/node_modules/npm/node_modules/semver/package.json"));
+        assert!(is_node_modules_package_json(
+            "usr/local/lib/node_modules/npm/package.json"
+        ));
+        assert!(is_node_modules_package_json(
+            "node_modules/express/package.json"
+        ));
+        assert!(is_node_modules_package_json(
+            "/app/node_modules/@types/node/package.json"
+        ));
+        assert!(is_node_modules_package_json(
+            "usr/local/lib/node_modules/npm/node_modules/semver/package.json"
+        ));
     }
 
     #[test]
     fn test_is_node_modules_package_json_negative() {
         assert!(!is_node_modules_package_json("/app/package.json"));
         assert!(!is_node_modules_package_json("package.json"));
-        assert!(!is_node_modules_package_json("node_modules/express/index.js"));
-        assert!(!is_node_modules_package_json("node_modules/express/package-lock.json"));
+        assert!(!is_node_modules_package_json(
+            "node_modules/express/index.js"
+        ));
+        assert!(!is_node_modules_package_json(
+            "node_modules/express/package-lock.json"
+        ));
     }
 
     #[test]
@@ -435,8 +447,14 @@ lodash@^4.17.0:
         ];
         let pkgs = JavaScriptCataloger.catalog(&files).unwrap();
         assert_eq!(pkgs.len(), 2);
-        assert!(pkgs.iter().any(|p| p.name == "npm" && p.version == "10.8.2"));
-        assert!(pkgs.iter().any(|p| p.name == "corepack" && p.version == "0.34.6"));
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "npm" && p.version == "10.8.2")
+        );
+        assert!(
+            pkgs.iter()
+                .any(|p| p.name == "corepack" && p.version == "0.34.6")
+        );
         assert_eq!(
             pkgs[0].metadata.get("source").map(|s| s.as_str()),
             Some("package.json")
@@ -466,10 +484,7 @@ lodash@^4.17.0:
     #[test]
     fn test_catalog_node_modules_skips_invalid_package_json() {
         let files = vec![
-            text_entry(
-                "node_modules/broken/package.json",
-                "not valid json",
-            ),
+            text_entry("node_modules/broken/package.json", "not valid json"),
             text_entry(
                 "node_modules/express/package.json",
                 r#"{"name": "express", "version": "4.18.2"}"#,

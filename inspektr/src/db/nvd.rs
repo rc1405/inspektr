@@ -292,8 +292,8 @@ fn cve_to_vuln_records(cve: &NvdCve, ecosystem_filter: Option<&str>) -> Vec<Vuln
             ecosystem,
             package_name,
             ranges,
-        severity_override: None,
-                })
+            severity_override: None,
+        })
         .collect();
 
     vec![VulnRecord {
@@ -622,10 +622,7 @@ impl VulnSource for NvdGithubSource {
                 let mut decoder = xz2::read::XzDecoder::new(compressed.as_ref());
                 let mut buf = Vec::new();
                 decoder.read_to_end(&mut buf).map_err(|e| {
-                    DatabaseError::ImportFailed(format!(
-                        "Failed to decompress {}: {}",
-                        filename, e
-                    ))
+                    DatabaseError::ImportFailed(format!("Failed to decompress {}: {}", filename, e))
                 })?;
                 buf
             };

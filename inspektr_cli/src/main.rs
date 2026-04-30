@@ -227,7 +227,12 @@ fn main() -> Result<()> {
                 output,
                 skip_failed,
                 nvd_from_github,
-            } => cmd_db_build(ecosystem.as_deref(), output.as_deref(), skip_failed, nvd_from_github),
+            } => cmd_db_build(
+                ecosystem.as_deref(),
+                output.as_deref(),
+                skip_failed,
+                nvd_from_github,
+            ),
 
             #[cfg(feature = "db-admin")]
             DbCommands::Push {

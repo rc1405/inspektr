@@ -35,23 +35,23 @@ fn compare_os_versions(a: &str, b: &str) -> std::cmp::Ordering {
 
     loop {
         // Skip non-alphanumeric, non-tilde characters (like `.` and `-`)
-        while ai < a_bytes.len()
-            && !a_bytes[ai].is_ascii_alphanumeric()
-            && a_bytes[ai] != b'~'
-        {
+        while ai < a_bytes.len() && !a_bytes[ai].is_ascii_alphanumeric() && a_bytes[ai] != b'~' {
             ai += 1;
         }
-        while bi < b_bytes.len()
-            && !b_bytes[bi].is_ascii_alphanumeric()
-            && b_bytes[bi] != b'~'
-        {
+        while bi < b_bytes.len() && !b_bytes[bi].is_ascii_alphanumeric() && b_bytes[bi] != b'~' {
             bi += 1;
         }
 
         // Handle tilde: sorts before everything (including end-of-string)
-        match (ai < a_bytes.len() && a_bytes[ai] == b'~',
-               bi < b_bytes.len() && b_bytes[bi] == b'~') {
-            (true, true) => { ai += 1; bi += 1; continue; }
+        match (
+            ai < a_bytes.len() && a_bytes[ai] == b'~',
+            bi < b_bytes.len() && b_bytes[bi] == b'~',
+        ) {
+            (true, true) => {
+                ai += 1;
+                bi += 1;
+                continue;
+            }
             (true, false) => return std::cmp::Ordering::Less,
             (false, true) => return std::cmp::Ordering::Greater,
             _ => {}
@@ -74,15 +74,11 @@ fn compare_os_versions(a: &str, b: &str) -> std::cmp::Ordering {
         if !a_bytes[ai].is_ascii_digit() || !b_bytes[bi].is_ascii_digit() {
             // Extract non-digit runs
             let a_start = ai;
-            while ai < a_bytes.len()
-                && a_bytes[ai].is_ascii_alphabetic()
-            {
+            while ai < a_bytes.len() && a_bytes[ai].is_ascii_alphabetic() {
                 ai += 1;
             }
             let b_start = bi;
-            while bi < b_bytes.len()
-                && b_bytes[bi].is_ascii_alphabetic()
-            {
+            while bi < b_bytes.len() && b_bytes[bi].is_ascii_alphabetic() {
                 bi += 1;
             }
             let a_seg = &a_bytes[a_start..ai];
@@ -266,11 +262,11 @@ fn match_os_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityMa
     // unless the binary IS the kernel (linux-image-*). The linux source
     // produces thousands of kernel CVEs that don't apply to userspace
     // packages like linux-libc-dev (just headers).
-    let source_pkg = package.metadata.get("source_package").filter(|s| {
-        s.as_str() != "linux" || package.name.starts_with("linux-image")
-    });
-    let mut source_result_ids: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let source_pkg = package
+        .metadata
+        .get("source_package")
+        .filter(|s| s.as_str() != "linux" || package.name.starts_with("linux-image"));
+    let mut source_result_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     if let Some(src) = source_pkg {
         if let Ok(source_results) = store.query(&ecosystem, src) {
             let seen: std::collections::HashSet<String> =
@@ -296,16 +292,14 @@ fn match_os_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityMa
 
             let is_after_introduced = match &range.introduced {
                 Some(intro) if intro != "0" => {
-                    compare_os_versions(pkg_version, strip_epoch(intro))
-                        != std::cmp::Ordering::Less
+                    compare_os_versions(pkg_version, strip_epoch(intro)) != std::cmp::Ordering::Less
                 }
                 _ => true,
             };
 
             let is_before_fixed = match &range.fixed {
                 Some(fix) => {
-                    compare_os_versions(pkg_version, strip_epoch(fix))
-                        == std::cmp::Ordering::Less
+                    compare_os_versions(pkg_version, strip_epoch(fix)) == std::cmp::Ordering::Less
                 }
                 None => true,
             };
@@ -375,8 +369,8 @@ mod tests {
                     introduced: Some("1.0.0".to_string()),
                     fixed: Some("1.2.3".to_string()),
                 }],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
         store.insert_vulnerabilities(&[record]).expect("insert");
         store
@@ -440,8 +434,8 @@ mod tests {
                         introduced: Some("0".to_string()),
                         fixed: Some("3.0.11-1~deb12u3".to_string()),
                     }],
-                                severity_override: None,
-}],
+                    severity_override: None,
+                }],
                 source: "osv".to_string(),
                 cvss_score: None,
             }])
@@ -492,7 +486,10 @@ mod tests {
         assert_eq!(compare_os_versions("5.40.0-6", "5.8.0-7"), Greater);
         assert_eq!(compare_os_versions("2.36-9+deb12u13", "2.6.6-1"), Greater);
         assert_eq!(compare_os_versions("1.36.1-r20", "1.36.1-r21"), Less);
-        assert_eq!(compare_os_versions("3.0.11-1~deb12u2", "3.0.11-1~deb12u3"), Less);
+        assert_eq!(
+            compare_os_versions("3.0.11-1~deb12u2", "3.0.11-1~deb12u3"),
+            Less
+        );
     }
 
     #[test]
@@ -517,6 +514,9 @@ mod tests {
         use std::cmp::Ordering::*;
         // Alpine uses -rN suffixes
         assert_eq!(compare_os_versions("1.36.1-r20", "1.36.1-r21"), Less);
-        assert_eq!(compare_os_versions("1.2.4_git20230717-r5", "1.2.4_git20230717-r6"), Less);
+        assert_eq!(
+            compare_os_versions("1.2.4_git20230717-r5", "1.2.4_git20230717-r6"),
+            Less
+        );
     }
 }

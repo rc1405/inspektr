@@ -199,8 +199,7 @@ impl SbomFormat for CycloneDxFormat {
         let inferred_distro = detect_os_component(&doc.components);
         let inferred_osv_ecosystem: Option<String> =
             inferred_distro.as_ref().map(versioned_osv_ecosystem);
-        let inferred_ecosystem: Option<Ecosystem> =
-            inferred_distro.as_ref().map(|d| d.ecosystem);
+        let inferred_ecosystem: Option<Ecosystem> = inferred_distro.as_ref().map(|d| d.ecosystem);
 
         // Second pass: decode package components. Only components with a
         // PURL are packages we can match vulns against. Skipping the rest
@@ -292,7 +291,9 @@ impl SbomFormat for CycloneDxFormat {
 /// to derive the distro name and version. Emits a component that external
 /// scanners like trivy and grype use to select the right vuln database.
 fn infer_os_component(packages: &[Package]) -> Option<CycloneDxComponent> {
-    let osv_eco = packages.iter().find_map(|p| p.metadata.get("osv_ecosystem"))?;
+    let osv_eco = packages
+        .iter()
+        .find_map(|p| p.metadata.get("osv_ecosystem"))?;
     let (name, version) = osv_eco.split_once(':')?;
     Some(CycloneDxComponent {
         component_type: "operating-system".to_string(),
@@ -320,7 +321,6 @@ fn detect_os_component(components: &[CycloneDxComponent]) -> Option<DistroInfo> 
         package_format,
     })
 }
-
 
 #[cfg(test)]
 mod tests {

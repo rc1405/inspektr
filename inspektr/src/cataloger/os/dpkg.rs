@@ -272,7 +272,10 @@ Version: 3.0.11-1
         let pkgs = parser.parse_packages(&files, &distro).unwrap();
         assert_eq!(pkgs.len(), 2, "expected exactly 2 packages, no duplicates");
         let base = pkgs.iter().find(|p| p.name == "base-files").unwrap();
-        assert_eq!(base.version, "2.0", "expected upgraded version from top layer");
+        assert_eq!(
+            base.version, "2.0",
+            "expected upgraded version from top layer"
+        );
         assert!(pkgs.iter().any(|p| p.name == "openssl"));
     }
 

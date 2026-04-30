@@ -241,8 +241,7 @@ pub(crate) fn parse_manifest_mf(
         map.get("groupid"),
         map.get("artifactid"),
         map.get("version"),
-    )
-        && !group.is_empty()
+    ) && !group.is_empty()
         && !artifact.is_empty()
         && !ver.is_empty()
     {
@@ -490,13 +489,20 @@ pub(crate) fn scan_archive(
         {
             continue;
         }
-        budget.total_decompressed_so_far =
-            budget.total_decompressed_so_far.saturating_add(buf.len() as u64);
+        budget.total_decompressed_so_far = budget
+            .total_decompressed_so_far
+            .saturating_add(buf.len() as u64);
         let Ok(text) = std::str::from_utf8(&buf) else {
             continue;
         };
         if let Some((g, a, v)) = parse_pom_properties(text) {
-            packages.push(build_jar_package(&g, &a, &v, effective_source.clone(), "jar"));
+            packages.push(build_jar_package(
+                &g,
+                &a,
+                &v,
+                effective_source.clone(),
+                "jar",
+            ));
         }
     }
 
@@ -505,9 +511,7 @@ pub(crate) fn scan_archive(
     // Nested archives are evaluated independently (they each run their
     // own three-pass scan when we recurse into them below).
     if packages.is_empty()
-        && let Some(i) = entry_names
-            .iter()
-            .position(|n| n == "META-INF/MANIFEST.MF")
+        && let Some(i) = entry_names.iter().position(|n| n == "META-INF/MANIFEST.MF")
         && budget.total_decompressed_so_far < budget.max_total_decompressed
         && let Ok(mut entry) = archive.by_index(i)
     {
@@ -521,10 +525,7 @@ pub(crate) fn scan_archive(
                 .total_decompressed_so_far
                 .saturating_add(buf.len() as u64);
             if let Ok(text) = std::str::from_utf8(&buf) {
-                let filename = nesting_stack
-                    .last()
-                    .copied()
-                    .unwrap_or(source_path);
+                let filename = nesting_stack.last().copied().unwrap_or(source_path);
                 let stem = artifact_stem_from_filename(filename);
                 if let Some((g, a, v)) = parse_manifest_mf(text, stem.as_deref()) {
                     packages.push(build_jar_package(
@@ -611,11 +612,7 @@ mod tests {
     fn has_archive_extension_recognizes_every_listed_extension() {
         for ext in ARCHIVE_EXTENSIONS {
             let path = format!("/some/where/foo.{}", ext);
-            assert!(
-                has_archive_extension(&path),
-                "should recognize .{}",
-                ext
-            );
+            assert!(has_archive_extension(&path), "should recognize .{}", ext);
         }
     }
 
@@ -717,7 +714,8 @@ artifactId=jackson-core
 
     #[test]
     fn parse_pom_properties_ignores_unknown_keys_and_blanks() {
-        let text = "\n# a comment\nunused=whatever\ngroupId=org.foo\n\nartifactId=bar\nversion=1.0\n";
+        let text =
+            "\n# a comment\nunused=whatever\ngroupId=org.foo\n\nartifactId=bar\nversion=1.0\n";
         assert_eq!(
             parse_pom_properties(text),
             Some(("org.foo".to_string(), "bar".to_string(), "1.0".to_string()))
@@ -862,7 +860,11 @@ bundle-version: 1.2.3
 ";
         assert_eq!(
             parse_manifest_mf(text, Some("bar")),
-            Some(("org.foo.bar".to_string(), "bar".to_string(), "1.2.3".to_string()))
+            Some((
+                "org.foo.bar".to_string(),
+                "bar".to_string(),
+                "1.2.3".to_string()
+            ))
         );
     }
 
@@ -903,11 +905,7 @@ Bundle-Version: 5.10.0
         let got = parse_manifest_mf(text, Some("jna"));
         assert_eq!(
             got,
-            Some((
-                "jna".to_string(),
-                "jna".to_string(),
-                "5.10.0".to_string()
-            ))
+            Some(("jna".to_string(), "jna".to_string(), "5.10.0".to_string()))
         );
     }
 
@@ -972,7 +970,11 @@ version: 2.3.1
         let got = parse_manifest_mf(text, Some("api-common"));
         assert_eq!(
             got,
-            Some(("com.google.api".to_string(), "api-common".to_string(), "2.3.1".to_string()))
+            Some((
+                "com.google.api".to_string(),
+                "api-common".to_string(),
+                "2.3.1".to_string()
+            ))
         );
     }
 
@@ -987,7 +989,11 @@ version: 2.3.1
         let got = parse_manifest_mf(text, None);
         assert_eq!(
             got,
-            Some(("com.google.api".to_string(), "api-common".to_string(), "2.3.1".to_string()))
+            Some((
+                "com.google.api".to_string(),
+                "api-common".to_string(),
+                "2.3.1".to_string()
+            ))
         );
     }
 
@@ -1025,7 +1031,11 @@ Bundle-Version: 2.3.1
         let got = parse_manifest_mf(text, Some("api-common"));
         assert_eq!(
             got,
-            Some(("com.google.api".to_string(), "api-common".to_string(), "2.3.1".to_string()))
+            Some((
+                "com.google.api".to_string(),
+                "api-common".to_string(),
+                "2.3.1".to_string()
+            ))
         );
     }
 
@@ -1039,7 +1049,11 @@ Implementation-Version: 8.13.0
         let got = parse_manifest_mf(text, Some("elasticsearch"));
         assert_eq!(
             got,
-            Some(("org.elasticsearch".to_string(), "server".to_string(), "8.13.0".to_string()))
+            Some((
+                "org.elasticsearch".to_string(),
+                "server".to_string(),
+                "8.13.0".to_string()
+            ))
         );
     }
 
@@ -1052,7 +1066,11 @@ Implementation-Title: org.elasticsearch.plugin#core;8.13.0
         let got = parse_manifest_mf(text, None);
         assert_eq!(
             got,
-            Some(("org.elasticsearch.plugin".to_string(), "core".to_string(), "8.13.0".to_string()))
+            Some((
+                "org.elasticsearch.plugin".to_string(),
+                "core".to_string(),
+                "8.13.0".to_string()
+            ))
         );
     }
 
@@ -1087,7 +1105,11 @@ Implementation-Title: org.other#other-lib;2.0.0
         let got = parse_manifest_mf(text, None);
         assert_eq!(
             got,
-            Some(("com.example".to_string(), "my-lib".to_string(), "1.0.0".to_string()))
+            Some((
+                "com.example".to_string(),
+                "my-lib".to_string(),
+                "1.0.0".to_string()
+            ))
         );
     }
 
@@ -1123,9 +1145,8 @@ Implementation-Title: org.other#other-lib;2.0.0
         let mut cursor = std::io::Cursor::new(Vec::<u8>::new());
         {
             let mut writer = zip::ZipWriter::new(&mut cursor);
-            let options: zip::write::SimpleFileOptions =
-                zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Stored);
+            let options: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
             for (name, bytes) in entries {
                 writer.start_file(*name, options).unwrap();
                 writer.write_all(bytes).unwrap();
@@ -1144,11 +1165,7 @@ groupId=org.foo
 artifactId=bar
 version=1.0.0
 ";
-        let zip_bytes = build_zip(&[(
-            "META-INF/maven/org.foo/bar/pom.properties",
-            props as &[u8],
-        )])
-        ;
+        let zip_bytes = build_zip(&[("META-INF/maven/org.foo/bar/pom.properties", props as &[u8])]);
 
         let mut budget = ScanBudget::default_v1();
         let pkgs = scan_archive(&zip_bytes, "/app/bar-1.0.0.jar", &[], &mut budget);
@@ -1159,10 +1176,7 @@ version=1.0.0
         assert_eq!(p.version, "1.0.0");
         assert_eq!(p.purl, "pkg:maven/org.foo/bar@1.0.0");
         assert_eq!(p.source_file.as_deref(), Some("/app/bar-1.0.0.jar"));
-        assert_eq!(
-            p.metadata.get("source").map(|s| s.as_str()),
-            Some("jar")
-        );
+        assert_eq!(p.metadata.get("source").map(|s| s.as_str()), Some("jar"));
     }
 
     #[test]
@@ -1173,17 +1187,25 @@ version=1.0.0
         let props_b = b"groupId=org.b\nartifactId=b-lib\nversion=2.0\n";
         let props_c = b"groupId=org.c\nartifactId=c-lib\nversion=3.0\n";
         let zip_bytes = build_zip(&[
-            ("META-INF/maven/org.a/a-lib/pom.properties", props_a as &[u8]),
-            ("META-INF/maven/org.b/b-lib/pom.properties", props_b as &[u8]),
-            ("META-INF/maven/org.c/c-lib/pom.properties", props_c as &[u8]),
+            (
+                "META-INF/maven/org.a/a-lib/pom.properties",
+                props_a as &[u8],
+            ),
+            (
+                "META-INF/maven/org.b/b-lib/pom.properties",
+                props_b as &[u8],
+            ),
+            (
+                "META-INF/maven/org.c/c-lib/pom.properties",
+                props_c as &[u8],
+            ),
         ]);
 
         let mut budget = ScanBudget::default_v1();
         let pkgs = scan_archive(&zip_bytes, "/app/uber.jar", &[], &mut budget);
 
         assert_eq!(pkgs.len(), 3);
-        let purls: std::collections::HashSet<_> =
-            pkgs.iter().map(|p| p.purl.clone()).collect();
+        let purls: std::collections::HashSet<_> = pkgs.iter().map(|p| p.purl.clone()).collect();
         assert!(purls.contains("pkg:maven/org.a/a-lib@1.0"));
         assert!(purls.contains("pkg:maven/org.b/b-lib@2.0"));
         assert!(purls.contains("pkg:maven/org.c/c-lib@3.0"));
@@ -1212,12 +1234,9 @@ version=1.0.0
         let mut budget = ScanBudget::default_v1();
         let pkgs = scan_archive(&zip_bytes, "/app/uber.jar", &[], &mut budget);
         assert_eq!(pkgs.len(), 2);
-        let purls: std::collections::HashSet<_> =
-            pkgs.iter().map(|p| p.purl.clone()).collect();
+        let purls: std::collections::HashSet<_> = pkgs.iter().map(|p| p.purl.clone()).collect();
         assert!(purls.contains("pkg:maven/org.slf4j/slf4j-api@1.7.36"));
-        assert!(
-            purls.contains("pkg:maven/co.elastic.apm/apm-agent-cached-lookup-key@1.44.0")
-        );
+        assert!(purls.contains("pkg:maven/co.elastic.apm/apm-agent-cached-lookup-key@1.44.0"));
     }
 
     #[test]
@@ -1283,8 +1302,7 @@ version=1.0.0
         let pkgs = scan_archive(&outer_bytes, "/app/outer.jar", &[], &mut budget);
 
         assert_eq!(pkgs.len(), 2);
-        let purls: std::collections::HashSet<_> =
-            pkgs.iter().map(|p| p.purl.clone()).collect();
+        let purls: std::collections::HashSet<_> = pkgs.iter().map(|p| p.purl.clone()).collect();
         assert!(purls.contains("pkg:maven/org.outer/app@1.0"));
         assert!(purls.contains("pkg:maven/org.inner/lib@2.0"));
     }
@@ -1401,7 +1419,10 @@ Bundle-SymbolicName: org.secondary.lib
 Bundle-Version: 9.9.9
 ";
         let zip_bytes = build_zip(&[
-            ("META-INF/maven/org.primary/bar/pom.properties", props as &[u8]),
+            (
+                "META-INF/maven/org.primary/bar/pom.properties",
+                props as &[u8],
+            ),
             ("META-INF/MANIFEST.MF", manifest as &[u8]),
         ]);
 
@@ -1452,8 +1473,7 @@ Implementation-Version: 1.0
 
         let pkgs = JavaArchiveCataloger.catalog(&files).unwrap();
         assert_eq!(pkgs.len(), 2);
-        let purls: std::collections::HashSet<_> =
-            pkgs.iter().map(|p| p.purl.clone()).collect();
+        let purls: std::collections::HashSet<_> = pkgs.iter().map(|p| p.purl.clone()).collect();
         assert!(purls.contains("pkg:maven/org.a/a-lib@1.0"));
         assert!(purls.contains("pkg:maven/org.b/b-lib@2.0"));
 
@@ -1501,10 +1521,7 @@ Implementation-Version: 1.0
             "META-INF/maven/org.b/lib/pom.properties",
             b"groupId=org.b\nartifactId=lib\nversion=1.0\n" as &[u8],
         )]);
-        let files = vec![
-            binary_entry("/app/a.jar", a),
-            binary_entry("/app/b.jar", b),
-        ];
+        let files = vec![binary_entry("/app/a.jar", a), binary_entry("/app/b.jar", b)];
         let pkgs = JavaArchiveCataloger.catalog(&files).unwrap();
         assert_eq!(pkgs.len(), 2);
     }
@@ -1515,12 +1532,10 @@ Implementation-Version: 1.0
         // Maven-written metadata. The JAR lives at
         // `test-fixtures/java/commons-lang3-3.12.0.jar` and is vendored
         // in the repo for determinism (no network in tests).
-        let jar_bytes = std::fs::read(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../test-fixtures/java/commons-lang3-3.12.0.jar"
-            ),
-        )
+        let jar_bytes = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../test-fixtures/java/commons-lang3-3.12.0.jar"
+        ))
         .expect("missing test-fixtures/java/commons-lang3-3.12.0.jar");
 
         let mut budget = ScanBudget::default_v1();
@@ -1548,9 +1563,6 @@ Implementation-Version: 1.0
             p.source_file.as_deref(),
             Some("/opt/app/commons-lang3-3.12.0.jar")
         );
-        assert_eq!(
-            p.metadata.get("source").map(|s| s.as_str()),
-            Some("jar")
-        );
+        assert_eq!(p.metadata.get("source").map(|s| s.as_str()), Some("jar"));
     }
 }

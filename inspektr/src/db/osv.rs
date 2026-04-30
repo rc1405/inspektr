@@ -657,10 +657,7 @@ mod tests {
     fn parse_osv_entry_uses_cve_alias_as_id() {
         let record = parse_osv_entry(SAMPLE_DEBIAN_WITH_ALIASES).expect("should parse");
         assert_eq!(record.id, "CVE-2023-44487");
-        assert_eq!(
-            record.original_id.as_deref(),
-            Some("DEBIAN-CVE-2023-44487")
-        );
+        assert_eq!(record.original_id.as_deref(), Some("DEBIAN-CVE-2023-44487"));
     }
 
     #[test]
@@ -737,10 +734,7 @@ mod tests {
         "#;
         let record = parse_osv_entry(json).expect("should parse");
         assert_eq!(record.id, "CVE-2024-1234");
-        assert_eq!(
-            record.original_id.as_deref(),
-            Some("GHSA-xxxx-yyyy-zzzz")
-        );
+        assert_eq!(record.original_id.as_deref(), Some("GHSA-xxxx-yyyy-zzzz"));
     }
 
     #[test]

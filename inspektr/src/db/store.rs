@@ -534,8 +534,8 @@ mod tests {
                     introduced: Some("1.0.0".to_string()),
                     fixed: Some("1.2.3".to_string()),
                 }],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         }
     }
 
@@ -703,8 +703,8 @@ mod tests {
                     introduced: Some("0".to_string()),
                     fixed: Some("1.25.3-1".to_string()),
                 }],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
         store.insert_vulnerabilities(&[record]).unwrap();
 
@@ -739,8 +739,8 @@ mod tests {
                     introduced: Some("1.0.0".to_string()),
                     fixed: Some("1.2.0".to_string()),
                 }],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
         store.insert_vulnerabilities(&[record]).unwrap();
 
@@ -771,8 +771,8 @@ mod tests {
                     introduced: Some("0".to_string()),
                     fixed: Some("1.17.11".to_string()),
                 }],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
 
         let nvd_record = VulnRecord {
@@ -793,11 +793,13 @@ mod tests {
                     introduced: Some("0".to_string()),
                     fixed: Some("0.0.0-20220525230936-793ad666bf5e".to_string()),
                 }],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
 
-        store.insert_vulnerabilities(&[osv_record, nvd_record]).unwrap();
+        store
+            .insert_vulnerabilities(&[osv_record, nvd_record])
+            .unwrap();
 
         let enriched = store.enrich_none_severity();
         assert!(enriched > 0, "should enrich at least one entry");
@@ -830,8 +832,8 @@ mod tests {
                     introduced: Some("0".to_string()),
                     fixed: Some("4.18.3".to_string()),
                 }],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
 
         store.insert_vulnerabilities(&[record]).unwrap();
@@ -862,8 +864,8 @@ mod tests {
                 ecosystem: "Debian:13".to_string(),
                 package_name: "gzip".to_string(),
                 ranges: vec![],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
         store.insert_vulnerabilities(&[osv_record]).unwrap();
 
@@ -895,8 +897,8 @@ mod tests {
                 ecosystem: "Go".to_string(),
                 package_name: "example.com/pkg".to_string(),
                 ranges: vec![],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
         let nvd = VulnRecord {
             id: "CVE-2023-0001".to_string(),
@@ -912,8 +914,8 @@ mod tests {
                 ecosystem: "Go".to_string(),
                 package_name: "golang.org/x/pkg".to_string(),
                 ranges: vec![],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
         store.insert_vulnerabilities(&[osv, nvd]).unwrap();
 
@@ -922,7 +924,11 @@ mod tests {
         store.enrich_none_severity();
 
         let results = store.query("Go", "example.com/pkg").unwrap();
-        assert_eq!(results[0].severity, Severity::High, "store data should win over index");
+        assert_eq!(
+            results[0].severity,
+            Severity::High,
+            "store data should win over index"
+        );
         assert_eq!(results[0].cvss_score, Some(7.5));
     }
 
@@ -948,8 +954,8 @@ mod tests {
                     introduced: Some("0".to_string()),
                     fixed: Some("4.17.22".to_string()),
                 }],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
 
         store.insert_vulnerabilities(&[record]).unwrap();
@@ -979,8 +985,8 @@ mod tests {
                 ecosystem: "Go".to_string(),
                 package_name: "example.com/a".to_string(),
                 ranges: vec![],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
 
         let with_cvss = VulnRecord {
@@ -997,8 +1003,8 @@ mod tests {
                 ecosystem: "Go".to_string(),
                 package_name: "example.com/b".to_string(),
                 ranges: vec![],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
 
         let needs_enrichment = VulnRecord {
@@ -1015,11 +1021,13 @@ mod tests {
                 ecosystem: "Go".to_string(),
                 package_name: "example.com/c".to_string(),
                 ranges: vec![],
-                        severity_override: None,
-}],
+                severity_override: None,
+            }],
         };
 
-        store.insert_vulnerabilities(&[no_cvss, with_cvss, needs_enrichment]).unwrap();
+        store
+            .insert_vulnerabilities(&[no_cvss, with_cvss, needs_enrichment])
+            .unwrap();
 
         store.enrich_none_severity();
 

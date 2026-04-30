@@ -119,7 +119,6 @@ pub mod osv;
 pub mod nvd;
 
 #[cfg(feature = "db-admin")]
-
 #[cfg(feature = "db-admin")]
 pub mod oval;
 
