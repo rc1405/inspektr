@@ -48,17 +48,15 @@ impl OsPackageParser for DpkgParser {
                 || path_str.starts_with("var/lib/dpkg/status.d/");
 
             if is_status {
-                if let Some(text) = file.as_text() {
-                    if text.len() > best_status_len {
+                if let Some(text) = file.as_text()
+                    && text.len() > best_status_len {
                         best_status = Some(text);
                         best_status_len = text.len();
                     }
-                }
-            } else if is_status_d {
-                if let Some(text) = file.as_text() {
+            } else if is_status_d
+                && let Some(text) = file.as_text() {
                     status_d.insert(path_str.into_owned(), text);
                 }
-            }
         }
 
         let mut combined = String::new();
@@ -155,11 +153,10 @@ pub fn parse_dpkg_status(
             let purl_version = purl_encode_deb_version(&version);
             let purl = format!("pkg:deb/{}/{}@{}", distro_id, name, purl_version);
             let mut metadata = HashMap::new();
-            if let Some(src) = source {
-                if src != name {
+            if let Some(src) = source
+                && src != name {
                     metadata.insert("source_package".to_string(), src);
                 }
-            }
             packages.push(Package {
                 name,
                 version,

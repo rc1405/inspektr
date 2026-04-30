@@ -118,18 +118,17 @@ pub fn detect_distro(files: &[FileEntry]) -> Option<DistroInfo> {
     // Try /etc/os-release first
     for file in files {
         let path_str = file.path.to_string_lossy();
-        if path_str.ends_with("/etc/os-release") || path_str == "etc/os-release" {
-            if let Some(text) = file.as_text() {
+        if (path_str.ends_with("/etc/os-release") || path_str == "etc/os-release")
+            && let Some(text) = file.as_text() {
                 return parse_os_release(text);
             }
-        }
     }
 
     // Fallback: /etc/alpine-release
     for file in files {
         let path_str = file.path.to_string_lossy();
-        if path_str.ends_with("/etc/alpine-release") || path_str == "etc/alpine-release" {
-            if let Some(text) = file.as_text() {
+        if (path_str.ends_with("/etc/alpine-release") || path_str == "etc/alpine-release")
+            && let Some(text) = file.as_text() {
                 let version = text.trim().to_string();
                 return Some(DistroInfo {
                     id: "alpine".to_string(),
@@ -139,7 +138,6 @@ pub fn detect_distro(files: &[FileEntry]) -> Option<DistroInfo> {
                     package_format: PackageFormat::Apk,
                 });
             }
-        }
     }
 
     // Fallback: check for dpkg status (Distroless images may lack os-release)
@@ -299,11 +297,10 @@ pub fn versioned_osv_ecosystem(distro: &DistroInfo) -> String {
 /// Ubuntu LTS releases are even-numbered years with .04 suffix.
 fn is_ubuntu_lts_version(version: &str) -> bool {
     let parts: Vec<&str> = version.split('.').collect();
-    if parts.len() >= 2 && parts[1] == "04" {
-        if let Ok(year) = parts[0].parse::<u32>() {
+    if parts.len() >= 2 && parts[1] == "04"
+        && let Ok(year) = parts[0].parse::<u32>() {
             return year % 2 == 0;
         }
-    }
     false
 }
 

@@ -158,8 +158,8 @@ pub fn parse_yarn_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
             if let Some(at_pos) = header.rfind('@').filter(|&p| p > 0) {
                 current_name = Some(header[..at_pos].to_string());
             }
-        } else if trimmed.starts_with("version \"") {
-            if let Some(name) = current_name.take() {
+        } else if trimmed.starts_with("version \"")
+            && let Some(name) = current_name.take() {
                 let version = trimmed
                     .strip_prefix("version \"")
                     .and_then(|s| s.strip_suffix('"'))
@@ -168,7 +168,6 @@ pub fn parse_yarn_lock(content: &str) -> Result<Vec<Package>, CatalogerError> {
                     packages.push(make_js_package(&name, version));
                 }
             }
-        }
     }
     Ok(packages)
 }

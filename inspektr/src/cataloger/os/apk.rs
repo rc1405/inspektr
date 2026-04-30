@@ -29,14 +29,12 @@ impl OsPackageParser for ApkParser {
         let mut best_len: usize = 0;
         for file in files {
             let path_str = file.path.to_string_lossy();
-            if path_str.ends_with("/lib/apk/db/installed") || path_str == "lib/apk/db/installed" {
-                if let Some(text) = file.as_text() {
-                    if text.len() > best_len {
+            if (path_str.ends_with("/lib/apk/db/installed") || path_str == "lib/apk/db/installed")
+                && let Some(text) = file.as_text()
+                    && text.len() > best_len {
                         best = Some(text);
                         best_len = text.len();
                     }
-                }
-            }
         }
         match best {
             Some(text) => parse_apk_installed(text, distro),

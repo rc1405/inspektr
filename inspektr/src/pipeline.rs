@@ -150,7 +150,7 @@ pub fn scan_and_report(
 ) -> Result<crate::vuln::report::ScanReport, InspektrError> {
     let (sbom, target_str, target_type_str) = match (target, sbom_path) {
         (_, Some(path)) => {
-            let bytes = std::fs::read(path).map_err(|e| crate::error::SourceError::Io(e))?;
+            let bytes = std::fs::read(path).map_err(crate::error::SourceError::Io)?;
             let format_name = detect_sbom_format(&bytes);
             let formatter = select_format(format_name)?;
             let sbom = formatter.decode(&bytes)?;

@@ -50,8 +50,8 @@ impl Cataloger for GoCataloger {
                         }
                     }
                 }
-            } else if file_name == "go.sum" {
-                if let Some(text) = file.as_text() {
+            } else if file_name == "go.sum"
+                && let Some(text) = file.as_text() {
                     for mut pkg in parse_go_sum(text)? {
                         pkg.metadata
                             .insert("source".to_string(), "go.sum".to_string());
@@ -62,7 +62,6 @@ impl Cataloger for GoCataloger {
                         }
                     }
                 }
-            }
         }
 
         // Go binary scans: preserve per-binary attribution.

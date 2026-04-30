@@ -7,7 +7,6 @@ use inspektr::sbom::cyclonedx::CycloneDxFormat;
 use inspektr::source::Source;
 use inspektr::source::filesystem::FilesystemSource;
 use inspektr::vuln::matcher;
-use std::collections::HashMap;
 
 #[test]
 fn test_full_pipeline_go_filesystem() {
@@ -81,6 +80,7 @@ fn test_full_pipeline_go_filesystem() {
                 introduced: Some("1.0.0".to_string()),
                 fixed: Some("1.2.0".to_string()),
             }],
+            severity_override: None,
         }],
     };
     store

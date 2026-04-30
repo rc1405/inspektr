@@ -172,7 +172,7 @@ pub fn parse_rpm_header_blob(blob: &[u8]) -> Result<Option<(String, String)>, St
     }
 
     // Check magic
-    if &blob[0..4] != &RPM_HEADER_MAGIC {
+    if blob[0..4] != RPM_HEADER_MAGIC {
         return Err(format!(
             "invalid RPM header magic: {:02x} {:02x} {:02x} {:02x}",
             blob[0], blob[1], blob[2], blob[3]

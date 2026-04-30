@@ -226,15 +226,13 @@ impl SbomFormat for CycloneDxFormat {
                         } else {
                             metadata.insert(key.to_string(), prop.value);
                         }
-                    } else if prop.name == "syft:metadata:source"
-                        || prop.name == "aquasecurity:trivy:SrcName"
-                    {
-                        if !prop.value.is_empty() && prop.value != comp.name {
+                    } else if (prop.name == "syft:metadata:source"
+                        || prop.name == "aquasecurity:trivy:SrcName")
+                        && !prop.value.is_empty() && prop.value != comp.name {
                             metadata
                                 .entry("source_package".to_string())
                                 .or_insert(prop.value);
                         }
-                    }
                 }
 
                 // Backfill `osv_ecosystem` from the inferred distro when the
