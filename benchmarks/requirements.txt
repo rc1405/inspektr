@@ -1,0 +1,3 @@
+# Python stdlib only — no external dependencies needed
+# This file exists to document the Python version requirement
+# Requires Python 3.8+

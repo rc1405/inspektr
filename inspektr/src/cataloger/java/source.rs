@@ -1,9 +1,10 @@
-//! Java ecosystem cataloger.
+//! Java source-file cataloger.
 //!
 //! Discovers Java/Maven packages from `pom.xml`, `build.gradle`, and
-//! `build.gradle.kts` files.
+//! `build.gradle.kts` files. Compiled JAR/WAR/EAR archives are handled
+//! by the sibling `archive` module.
 
-use super::Cataloger;
+use crate::cataloger::Cataloger;
 use crate::error::CatalogerError;
 use crate::models::{Ecosystem, FileEntry, Package};
 use std::collections::HashMap;
@@ -84,10 +85,10 @@ pub fn parse_pom_xml(content: &str) -> Result<Vec<Package>, CatalogerError> {
         let group_id = extract_xml_value(block, "groupId");
         let artifact_id = extract_xml_value(block, "artifactId");
         let version = extract_xml_value(block, "version");
-        if let (Some(gid), Some(aid), Some(ver)) = (group_id, artifact_id, version) {
-            if !ver.starts_with('$') {
-                packages.push(make_java_package(&gid, &aid, &ver));
-            }
+        if let (Some(gid), Some(aid), Some(ver)) = (group_id, artifact_id, version)
+            && !ver.starts_with('$')
+        {
+            packages.push(make_java_package(gid, aid, ver));
         }
         search_from = abs_start + end + "</dependency>".len();
     }

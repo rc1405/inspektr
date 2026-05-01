@@ -34,7 +34,7 @@ use crate::cataloger::Cataloger;
 use crate::cataloger::conan::ConanCataloger;
 use crate::cataloger::dotnet::DotNetCataloger;
 use crate::cataloger::golang::GoCataloger;
-use crate::cataloger::java::JavaCataloger;
+use crate::cataloger::java::{JavaArchiveCataloger, JavaCataloger};
 use crate::cataloger::javascript::JavaScriptCataloger;
 use crate::cataloger::os::OsCataloger;
 use crate::cataloger::php::PhpCataloger;
@@ -60,6 +60,7 @@ fn catalogers() -> Vec<Box<dyn Cataloger>> {
         Box::new(JavaScriptCataloger),
         Box::new(PythonCataloger),
         Box::new(JavaCataloger),
+        Box::new(JavaArchiveCataloger),
         Box::new(ConanCataloger),
         Box::new(VcpkgCataloger),
         Box::new(DotNetCataloger),
@@ -149,8 +150,9 @@ pub fn scan_and_report(
 ) -> Result<crate::vuln::report::ScanReport, InspektrError> {
     let (sbom, target_str, target_type_str) = match (target, sbom_path) {
         (_, Some(path)) => {
-            let bytes = std::fs::read(path).map_err(|e| crate::error::SourceError::Io(e))?;
-            let formatter = select_format("cyclonedx")?;
+            let bytes = std::fs::read(path).map_err(crate::error::SourceError::Io)?;
+            let format_name = detect_sbom_format(&bytes);
+            let formatter = select_format(format_name)?;
             let sbom = formatter.decode(&bytes)?;
             (sbom, path.to_string(), "sbom".to_string())
         }
@@ -183,6 +185,36 @@ pub fn scan_and_report(
         total_packages,
         &matches,
     ))
+}
+
+/// Detect an SBOM format from the raw bytes of a JSON document.
+///
+/// Checks for format-identifying top-level keys:
+/// - CycloneDX 1.x: `"bomFormat": "CycloneDX"`
+/// - SPDX 2.x: `"spdxVersion": "SPDX-2..."`
+///
+/// Falls back to `"cyclonedx"` if nothing matches, so existing behavior on
+/// malformed or unrecognized input is preserved.
+fn detect_sbom_format(bytes: &[u8]) -> &'static str {
+    // Parse just enough of the document to look at its top-level keys. A full
+    // decode would double the work we're about to do in the real decoder.
+    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) {
+        if value
+            .get("spdxVersion")
+            .and_then(|v| v.as_str())
+            .is_some_and(|s| s.starts_with("SPDX-"))
+        {
+            return "spdx";
+        }
+        if value
+            .get("bomFormat")
+            .and_then(|v| v.as_str())
+            .is_some_and(|s| s.eq_ignore_ascii_case("CycloneDX"))
+        {
+            return "cyclonedx";
+        }
+    }
+    "cyclonedx"
 }
 
 /// Map a format name string to a `SbomFormat` implementation.

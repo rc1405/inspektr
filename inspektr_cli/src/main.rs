@@ -132,6 +132,11 @@ enum DbCommands {
         /// Continue building even if a source fails (default: fail on first error).
         #[arg(long)]
         skip_failed: bool,
+
+        /// Use the GitHub NVD mirror instead of the NVD API.
+        /// Downloads yearly xz-compressed JSON files from fkie-cad/nvd-json-data-feeds.
+        #[arg(long)]
+        nvd_from_github: bool,
     },
 
     /// Push a built database to an OCI registry.
@@ -221,7 +226,13 @@ fn main() -> Result<()> {
                 ecosystem,
                 output,
                 skip_failed,
-            } => cmd_db_build(ecosystem.as_deref(), output.as_deref(), skip_failed),
+                nvd_from_github,
+            } => cmd_db_build(
+                ecosystem.as_deref(),
+                output.as_deref(),
+                skip_failed,
+                nvd_from_github,
+            ),
 
             #[cfg(feature = "db-admin")]
             DbCommands::Push {
@@ -396,9 +407,10 @@ fn cmd_db_build(
     ecosystem: Option<&str>,
     output: Option<&std::path::Path>,
     skip_failed: bool,
+    nvd_from_github: bool,
 ) -> Result<()> {
     use inspektr::db::store::VulnStore;
-    use inspektr::db::{normalize_ecosystem, vuln_sources};
+    use inspektr::db::{normalize_ecosystem, vuln_sources, vuln_sources_github_nvd};
 
     let db_path = output
         .map(|p| p.to_path_buf())
@@ -441,7 +453,13 @@ fn cmd_db_build(
 
     let mut total = 0;
     let mut failures: Vec<String> = Vec::new();
-    for source in vuln_sources() {
+    let sources = if nvd_from_github {
+        eprintln!("Using GitHub NVD mirror (fkie-cad/nvd-json-data-feeds)");
+        vuln_sources_github_nvd()
+    } else {
+        vuln_sources()
+    };
+    for source in sources {
         match source.import(&mut store, ecosystem) {
             Ok(count) => total += count,
             Err(e) => {
@@ -467,6 +485,8 @@ fn cmd_db_build(
             failures.join("\n  ")
         );
     }
+
+    store.enrich_none_severity();
 
     store.save().context("Failed to save database")?;
 

@@ -1,0 +1,75 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      num_runs:
+        description: "Number of runs per tool per image"
+        required: false
+        default: "5"
+      images:
+        description: "Comma-separated image list (empty = all from config)"
+        required: false
+        default: ""
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Add ~/bin to PATH
+        run: |
+          mkdir -p "${HOME}/bin"
+          echo "${HOME}/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-benchmark-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-benchmark-
+
+      - name: Build inspektr
+        run: cargo build --release
+
+      - name: Setup (install tools, pull images, fetch DBs)
+        run: ./benchmarks/01-setup.sh
+
+      - name: Run scans
+        env:
+          BENCHMARK_NUM_RUNS: ${{ github.event.inputs.num_runs }}
+          BENCHMARK_IMAGES: ${{ github.event.inputs.images }}
+        run: ./benchmarks/02-scan.sh
+
+      - name: Analyze results
+        run: python3 benchmarks/03-analyze.py
+
+      - name: Generate reports
+        run: python3 benchmarks/04-report.py
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-reports-${{ github.run_number }}
+          path: benchmarks/results/reports/
+          retention-days: 90
+
+      - name: Post summary
+        if: always()
+        run: |
+          if [[ -f benchmarks/results/reports/summary.md ]]; then
+            head -c 1000000 benchmarks/results/reports/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Benchmark Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "No summary report was generated." >> "$GITHUB_STEP_SUMMARY"
+          fi

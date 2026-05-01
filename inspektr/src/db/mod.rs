@@ -39,7 +39,6 @@
 //! - `osv` — OSV bulk downloads for language and OS ecosystems
 //! - `nvd` — NVD API (with incremental updates)
 //! - `oracle` — Oracle OVAL feeds
-//! - `photon` — Photon OS JSON advisories
 //! - `azure_linux` — Azure Linux / CBL-Mariner OVAL feeds
 //! - `bottlerocket` — Bottlerocket updateinfo
 //!
@@ -75,7 +74,7 @@ pub fn download_to_file(
     let db_path = crate::pipeline::default_db_path();
 
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| crate::error::SourceError::Io(e))?;
+        std::fs::create_dir_all(parent).map_err(crate::error::SourceError::Io)?;
     }
 
     crate::oci::pull::pull_artifact(registry, &db_path, auth)?;
@@ -120,8 +119,6 @@ pub mod osv;
 pub mod nvd;
 
 #[cfg(feature = "db-admin")]
-pub mod photon;
-
 #[cfg(feature = "db-admin")]
 pub mod oval;
 
@@ -193,7 +190,7 @@ pub const ALL_ECOSYSTEMS: &[&str] = &[
 /// Additional ecosystem names accepted for --ecosystem filtering.
 /// These are handled by distro-native importers, not OSV.
 #[cfg(feature = "db-admin")]
-const DISTRO_ECOSYSTEMS: &[&str] = &["Oracle", "Photon OS", "Azure Linux", "Bottlerocket"];
+const DISTRO_ECOSYSTEMS: &[&str] = &["Oracle", "Azure Linux", "Bottlerocket"];
 
 /// Normalize an ecosystem string to its canonical form (case-insensitive match).
 ///
@@ -211,13 +208,24 @@ pub fn normalize_ecosystem(input: &str) -> Option<&'static str> {
 
 /// Return all registered vulnerability data source importers.
 ///
-/// Includes OSV, NVD, Photon, Oracle OVAL, Azure Linux OVAL, and Bottlerocket.
+/// Includes OSV, NVD, Oracle OVAL, Azure Linux OVAL, and Bottlerocket.
 #[cfg(feature = "db-admin")]
 pub fn vuln_sources() -> Vec<Box<dyn VulnSource>> {
     vec![
         Box::new(osv::OsvSource),
         Box::new(nvd::NvdSource::new()),
-        Box::new(photon::PhotonSource),
+        Box::new(oracle::OracleSource),
+        Box::new(azure_linux::AzureLinuxSource),
+        Box::new(bottlerocket::BottlerocketSource),
+    ]
+}
+
+/// Like [`vuln_sources`] but uses the GitHub NVD mirror instead of the NVD API.
+#[cfg(feature = "db-admin")]
+pub fn vuln_sources_github_nvd() -> Vec<Box<dyn VulnSource>> {
+    vec![
+        Box::new(osv::OsvSource),
+        Box::new(nvd::NvdGithubSource),
         Box::new(oracle::OracleSource),
         Box::new(azure_linux::AzureLinuxSource),
         Box::new(bottlerocket::BottlerocketSource),
@@ -238,7 +246,6 @@ mod tests {
         assert_eq!(normalize_ecosystem("unknown"), None);
         // Distro-native ecosystems
         assert_eq!(normalize_ecosystem("oracle"), Some("Oracle"));
-        assert_eq!(normalize_ecosystem("photon os"), Some("Photon OS"));
         assert_eq!(normalize_ecosystem("azure linux"), Some("Azure Linux"));
         assert_eq!(normalize_ecosystem("bottlerocket"), Some("Bottlerocket"));
     }

@@ -28,17 +28,24 @@ impl OsPackageParser for RpmParser {
         files: &[FileEntry],
         distro: &DistroInfo,
     ) -> Result<Vec<Package>, CatalogerError> {
-        // Find an rpmdb.sqlite file in the provided file entries
+        // Multi-layer images ship one rpmdb.sqlite per layer that touched
+        // packages. The LAST matching entry is the top layer's snapshot;
+        // earlier entries are obsolete intermediate states. Returning on
+        // the first match returns a stale base-layer view.
+        let mut latest: Option<&[u8]> = None;
         for file in files {
             let path_str = file.path.to_string_lossy();
             if path_str.ends_with("rpmdb.sqlite") {
-                let bytes = file.as_bytes();
-                return parse_rpmdb_sqlite(bytes, distro);
+                latest = Some(file.as_bytes());
             }
         }
-
-        eprintln!("warning: no rpmdb.sqlite found; returning empty package list");
-        Ok(Vec::new())
+        match latest {
+            Some(bytes) => parse_rpmdb_sqlite(bytes, distro),
+            None => {
+                eprintln!("warning: no rpmdb.sqlite found; returning empty package list");
+                Ok(Vec::new())
+            }
+        }
     }
 }
 
@@ -165,7 +172,7 @@ pub fn parse_rpm_header_blob(blob: &[u8]) -> Result<Option<(String, String)>, St
     }
 
     // Check magic
-    if &blob[0..4] != &RPM_HEADER_MAGIC {
+    if blob[0..4] != RPM_HEADER_MAGIC {
         return Err(format!(
             "invalid RPM header magic: {:02x} {:02x} {:02x} {:02x}",
             blob[0], blob[1], blob[2], blob[3]

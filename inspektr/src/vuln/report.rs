@@ -122,10 +122,23 @@ pub fn build_scan_report(
     let mut index: HashMap<(String, String, String), usize> = HashMap::new();
 
     for m in matches {
+        // Normalize version for dedup: strip Debian epoch and extract the
+        // real version from `+reallyX.Y.Z` suffixes. Binary packages from
+        // the same source can have different epochs and `really` versions
+        // (e.g., "1:4.16.0-2+really2.41-5" is really version "2.41-5").
+        let mut dedup_version = match m.package.version.find(':') {
+            Some(pos) if m.package.version[..pos].bytes().all(|b| b.is_ascii_digit()) => {
+                m.package.version[pos + 1..].to_string()
+            }
+            _ => m.package.version.clone(),
+        };
+        if let Some(pos) = dedup_version.find("+really") {
+            dedup_version = dedup_version[pos + "+really".len()..].to_string();
+        }
         let key = (
             m.vulnerability.id.clone(),
             m.package.name.clone(),
-            m.package.version.clone(),
+            dedup_version,
         );
 
         if let Some(&idx) = index.get(&key) {

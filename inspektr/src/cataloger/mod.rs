@@ -11,7 +11,7 @@
 //! | [`golang`] | Go | `go.mod`, `go.sum`, Go binaries (ELF/Mach-O/PE) |
 //! | [`javascript`] | JavaScript/Node | `package-lock.json`, `yarn.lock` |
 //! | [`python`] | Python | `requirements.txt`, `Pipfile.lock`, `poetry.lock` |
-//! | [`java`] | Java | `pom.xml`, `build.gradle`, `build.gradle.kts` |
+//! | [`java`] | Java | `pom.xml`, `build.gradle`, `build.gradle.kts`, `.jar`/`.war`/`.ear` archives |
 //! | [`conan`] | C/C++ Conan | `conan.lock` |
 //! | [`vcpkg`] | C/C++ vcpkg | `vcpkg.json` |
 //! | [`dotnet`] | .NET | `packages.lock.json`, `*.csproj`, `packages.config` |

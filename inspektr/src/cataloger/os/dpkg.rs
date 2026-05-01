@@ -26,8 +26,19 @@ impl OsPackageParser for DpkgParser {
         files: &[FileEntry],
         distro: &DistroInfo,
     ) -> Result<Vec<Package>, CatalogerError> {
-        // Collect content from all dpkg status files
-        let mut combined = String::new();
+        // Container images ship a copy of `/var/lib/dpkg/status` in every
+        // layer that touched packages. Each copy is a complete snapshot.
+        // We want the most complete one (largest), which is the top
+        // layer's version. We can't rely on ordering because Docker
+        // daemon exports may return layers in non-manifest order.
+        //
+        // For `status.d/*` (distroless), each file represents a different
+        // package's control record, so we dedupe by path instead of
+        // keeping only the largest entry. Later layers overwriting the same
+        // path still win by HashMap insert order.
+        let mut best_status: Option<&str> = None;
+        let mut best_status_len: usize = 0;
+        let mut status_d: HashMap<String, &str> = HashMap::new();
 
         for file in files {
             let path_str = file.path.to_string_lossy();
@@ -36,14 +47,27 @@ impl OsPackageParser for DpkgParser {
             let is_status_d = path_str.contains("/var/lib/dpkg/status.d/")
                 || path_str.starts_with("var/lib/dpkg/status.d/");
 
-            if is_status || is_status_d {
-                if let Some(text) = file.as_text() {
-                    if !combined.is_empty() {
-                        combined.push_str("\n\n");
-                    }
-                    combined.push_str(text);
+            if is_status {
+                if let Some(text) = file.as_text()
+                    && text.len() > best_status_len
+                {
+                    best_status = Some(text);
+                    best_status_len = text.len();
                 }
+            } else if is_status_d && let Some(text) = file.as_text() {
+                status_d.insert(path_str.into_owned(), text);
             }
+        }
+
+        let mut combined = String::new();
+        if let Some(text) = best_status {
+            combined.push_str(text);
+        }
+        for text in status_d.values() {
+            if !combined.is_empty() {
+                combined.push_str("\n\n");
+            }
+            combined.push_str(text);
         }
 
         if combined.is_empty() {
@@ -52,6 +76,19 @@ impl OsPackageParser for DpkgParser {
 
         parse_dpkg_status(&combined, distro)
     }
+}
+
+/// Encode a Debian version for use in a PURL.
+///
+/// Strips the epoch prefix (e.g. `1:2.41-5` → `2.41-5`) since epochs are
+/// Debian-internal and not part of the upstream version identity. Also
+/// percent-encodes `+` as `%2B` per the PURL spec.
+fn purl_encode_deb_version(version: &str) -> String {
+    let without_epoch = match version.find(':') {
+        Some(pos) => &version[pos + 1..],
+        None => version,
+    };
+    without_epoch.replace('+', "%2B")
 }
 
 /// Determine the PURL distro id from the DistroInfo.
@@ -79,6 +116,7 @@ pub fn parse_dpkg_status(
         let mut name = None;
         let mut version = None;
         let mut status = None;
+        let mut source = None;
 
         for line in record.lines() {
             if let Some(val) = line.strip_prefix("Package:") {
@@ -87,6 +125,10 @@ pub fn parse_dpkg_status(
                 version = Some(val.trim().to_string());
             } else if let Some(val) = line.strip_prefix("Status:") {
                 status = Some(val.trim().to_string());
+            } else if let Some(val) = line.strip_prefix("Source:") {
+                let src = val.trim();
+                let src_name = src.split_whitespace().next().unwrap_or(src);
+                source = Some(src_name.to_string());
             }
         }
 
@@ -108,13 +150,20 @@ pub fn parse_dpkg_status(
         }
 
         if let (Some(name), Some(version)) = (name, version) {
-            let purl = format!("pkg:deb/{}/{}@{}", distro_id, name, version);
+            let purl_version = purl_encode_deb_version(&version);
+            let purl = format!("pkg:deb/{}/{}@{}", distro_id, name, purl_version);
+            let mut metadata = HashMap::new();
+            if let Some(src) = source
+                && src != name
+            {
+                metadata.insert("source_package".to_string(), src);
+            }
             packages.push(Package {
                 name,
                 version,
                 ecosystem: distro.ecosystem,
                 purl,
-                metadata: HashMap::new(),
+                metadata,
                 source_file: None,
             });
         }
@@ -183,6 +232,52 @@ Version: 2.0.0
     }
 
     #[test]
+    fn test_parse_packages_uses_latest_status_not_concat() {
+        // Simulate a multi-layer image: an early layer installed
+        // `base-files` at v1; a later layer upgraded `base-files` and
+        // added `openssl`. Both layers hand us their own copy of
+        // `var/lib/dpkg/status`. We must use the LAST copy only; otherwise
+        // the parser produces duplicates and stale versions.
+        let parser = DpkgParser;
+        let distro = make_distro("debian", Ecosystem::Debian);
+
+        let early_status = "\
+Package: base-files
+Status: install ok installed
+Version: 1.0
+
+";
+        let late_status = "\
+Package: base-files
+Status: install ok installed
+Version: 2.0
+
+Package: openssl
+Status: install ok installed
+Version: 3.0.11-1
+
+";
+        let files = vec![
+            FileEntry {
+                path: std::path::PathBuf::from("var/lib/dpkg/status"),
+                contents: crate::models::FileContents::Text(early_status.to_string()),
+            },
+            FileEntry {
+                path: std::path::PathBuf::from("var/lib/dpkg/status"),
+                contents: crate::models::FileContents::Text(late_status.to_string()),
+            },
+        ];
+        let pkgs = parser.parse_packages(&files, &distro).unwrap();
+        assert_eq!(pkgs.len(), 2, "expected exactly 2 packages, no duplicates");
+        let base = pkgs.iter().find(|p| p.name == "base-files").unwrap();
+        assert_eq!(
+            base.version, "2.0",
+            "expected upgraded version from top layer"
+        );
+        assert!(pkgs.iter().any(|p| p.name == "openssl"));
+    }
+
+    #[test]
     fn test_ubuntu_purl() {
         let content = "\
 Package: libc6
@@ -193,5 +288,25 @@ Version: 2.38-1ubuntu6
         let pkgs = parse_dpkg_status(content, &distro).unwrap();
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].purl, "pkg:deb/ubuntu/libc6@2.38-1ubuntu6");
+    }
+
+    #[test]
+    fn test_purl_strips_epoch_and_encodes_plus() {
+        let distro = make_distro("debian", Ecosystem::Debian);
+        let content = "\
+Package: bsdutils
+Version: 1:2.41-5
+Status: install ok installed
+
+Package: base-files
+Version: 13.8+deb13u4
+Status: install ok installed
+";
+        let pkgs = parse_dpkg_status(content, &distro).unwrap();
+        assert_eq!(pkgs.len(), 2);
+        assert_eq!(pkgs[0].purl, "pkg:deb/debian/bsdutils@2.41-5");
+        assert_eq!(pkgs[0].version, "1:2.41-5");
+        assert_eq!(pkgs[1].purl, "pkg:deb/debian/base-files@13.8%2Bdeb13u4");
+        assert_eq!(pkgs[1].version, "13.8+deb13u4");
     }
 }

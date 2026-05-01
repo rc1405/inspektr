@@ -29,12 +29,12 @@ pub fn detect_target_type(target: &str) -> TargetType {
         return TargetType::OciImage;
     }
     let path = Path::new(target);
-    if path.is_file() {
-        if let Ok(bytes) = std::fs::read(path) {
-            if bytes.len() >= 4 && crate::source::filesystem::is_binary_content(&bytes) {
-                return TargetType::Binary;
-            }
-        }
+    if path.is_file()
+        && let Ok(bytes) = std::fs::read(path)
+        && bytes.len() >= 4
+        && crate::source::filesystem::is_binary_content(&bytes)
+    {
+        return TargetType::Binary;
     }
     TargetType::Filesystem
 }

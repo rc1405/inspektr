@@ -118,27 +118,27 @@ pub fn detect_distro(files: &[FileEntry]) -> Option<DistroInfo> {
     // Try /etc/os-release first
     for file in files {
         let path_str = file.path.to_string_lossy();
-        if path_str.ends_with("/etc/os-release") || path_str == "etc/os-release" {
-            if let Some(text) = file.as_text() {
-                return parse_os_release(text);
-            }
+        if (path_str.ends_with("/etc/os-release") || path_str == "etc/os-release")
+            && let Some(text) = file.as_text()
+        {
+            return parse_os_release(text);
         }
     }
 
     // Fallback: /etc/alpine-release
     for file in files {
         let path_str = file.path.to_string_lossy();
-        if path_str.ends_with("/etc/alpine-release") || path_str == "etc/alpine-release" {
-            if let Some(text) = file.as_text() {
-                let version = text.trim().to_string();
-                return Some(DistroInfo {
-                    id: "alpine".to_string(),
-                    version,
-                    name: "Alpine Linux".to_string(),
-                    ecosystem: Ecosystem::Alpine,
-                    package_format: PackageFormat::Apk,
-                });
-            }
+        if (path_str.ends_with("/etc/alpine-release") || path_str == "etc/alpine-release")
+            && let Some(text) = file.as_text()
+        {
+            let version = text.trim().to_string();
+            return Some(DistroInfo {
+                id: "alpine".to_string(),
+                version,
+                name: "Alpine Linux".to_string(),
+                ecosystem: Ecosystem::Alpine,
+                package_format: PackageFormat::Apk,
+            });
         }
     }
 
@@ -201,7 +201,7 @@ fn parse_os_release(content: &str) -> Option<DistroInfo> {
 
 /// Map an os-release ID to an Ecosystem variant and package format.
 /// Adding a new distro = adding one arm to this match.
-fn map_distro_id(id: &str) -> Option<(Ecosystem, PackageFormat)> {
+pub fn map_distro_id(id: &str) -> Option<(Ecosystem, PackageFormat)> {
     match id {
         // apk-based
         "alpine" => Some((Ecosystem::Alpine, PackageFormat::Apk)),
@@ -230,24 +230,30 @@ fn map_distro_id(id: &str) -> Option<(Ecosystem, PackageFormat)> {
 }
 
 /// Build the versioned OSV ecosystem name for a distro.
+///
 /// OSV uses versioned ecosystem names for OS distributions, e.g.:
-/// - Alpine → "Alpine:v3.18"
-/// - Debian → "Debian:12"
-/// - Ubuntu → "Ubuntu:22.04"
-/// - Red Hat → "Red Hat:9" (major version only)
-fn versioned_osv_ecosystem(distro: &DistroInfo) -> String {
+/// - Alpine → `"Alpine:v3.18"` (major.minor with `v` prefix)
+/// - Debian → `"Debian:12"` (major only)
+/// - Ubuntu → `"Ubuntu:22.04"` (major.minor)
+/// - Red Hat → `"Red Hat:9"` (major only)
+///
+/// The input `distro.version` may come from `/etc/os-release` (typically a
+/// canonical form like `"13"`) or from a third-party SBOM's operating-system
+/// component (which may include patch versions like `"13.4"`). This function
+/// normalizes both into the canonical OSV form.
+pub fn versioned_osv_ecosystem(distro: &DistroInfo) -> String {
     let base = distro.ecosystem.as_osv_ecosystem();
     if distro.version.is_empty() {
         return base.to_string();
     }
 
     match distro.ecosystem {
-        // Alpine uses "Alpine:v3.18" format
+        // Alpine uses "Alpine:v3.18" format — major.minor with leading `v`.
         Ecosystem::Alpine | Ecosystem::Wolfi | Ecosystem::Chainguard => {
             let version = if distro.version.starts_with('v') {
                 distro.version.clone()
             } else {
-                // Use major.minor only
+                // Use major.minor only, dropping any patch/build suffix.
                 let parts: Vec<&str> = distro.version.split('.').collect();
                 if parts.len() >= 2 {
                     format!("v{}.{}", parts[0], parts[1])
@@ -257,20 +263,49 @@ fn versioned_osv_ecosystem(distro: &DistroInfo) -> String {
             };
             format!("{}:{}", base, version)
         }
-        // Debian uses "Debian:12"
+        // Debian OSV keys are major-only (`"Debian:12"`). Third-party SBOMs
+        // sometimes report point releases like `"13.4"`; strip to major.
         Ecosystem::Debian | Ecosystem::Distroless => {
-            format!("{}:{}", base, distro.version)
+            let major = distro.version.split('.').next().unwrap_or(&distro.version);
+            format!("{}:{}", base, major)
         }
-        // Ubuntu uses "Ubuntu:22.04"
+        // Ubuntu OSV keys include the release type: `"Ubuntu:22.04:LTS"` for
+        // LTS releases, `"Ubuntu:25.10"` for non-LTS. The LTS suffix is
+        // detected from the distro's pretty name (e.g., "Ubuntu 22.04.5 LTS").
         Ecosystem::Ubuntu => {
-            format!("{}:{}", base, distro.version)
+            let parts: Vec<&str> = distro.version.split('.').collect();
+            let ver = if parts.len() >= 2 {
+                format!("{}.{}", parts[0], parts[1])
+            } else {
+                distro.version.clone()
+            };
+            // Detect LTS from the distro name ("Ubuntu 22.04.5 LTS") or
+            // from the version number: even year + .04 = LTS release.
+            let is_lts = distro.name.contains("LTS") || is_ubuntu_lts_version(&ver);
+            if is_lts {
+                format!("{}:{}:LTS", base, ver)
+            } else {
+                format!("{}:{}", base, ver)
+            }
         }
-        // RPM distros typically use major version only
+        // RPM distros typically use major version only.
         _ => {
             let major = distro.version.split('.').next().unwrap_or(&distro.version);
             format!("{}:{}", base, major)
         }
     }
+}
+
+/// Ubuntu LTS releases are even-numbered years with .04 suffix.
+fn is_ubuntu_lts_version(version: &str) -> bool {
+    let parts: Vec<&str> = version.split('.').collect();
+    if parts.len() >= 2
+        && parts[1] == "04"
+        && let Ok(year) = parts[0].parse::<u32>()
+    {
+        return year % 2 == 0;
+    }
+    false
 }
 
 #[cfg(test)]

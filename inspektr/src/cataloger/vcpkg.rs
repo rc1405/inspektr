@@ -28,14 +28,14 @@ impl Cataloger for VcpkgCataloger {
 
         for file in files {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if file_name == "vcpkg.json" {
-                if let Some(text) = file.as_text() {
-                    for mut pkg in parse_vcpkg_json(text)? {
-                        pkg.source_file = Some(file.path.display().to_string());
-                        let key = format!("{}@{}", pkg.name, pkg.version);
-                        if seen.insert(key) {
-                            packages.push(pkg);
-                        }
+            if file_name == "vcpkg.json"
+                && let Some(text) = file.as_text()
+            {
+                for mut pkg in parse_vcpkg_json(text)? {
+                    pkg.source_file = Some(file.path.display().to_string());
+                    let key = format!("{}@{}", pkg.name, pkg.version);
+                    if seen.insert(key) {
+                        packages.push(pkg);
                     }
                 }
             }
