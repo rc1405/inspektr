@@ -51,17 +51,18 @@ impl Cataloger for GoCataloger {
                     }
                 }
             } else if file_name == "go.sum"
-                && let Some(text) = file.as_text() {
-                    for mut pkg in parse_go_sum(text)? {
-                        pkg.metadata
-                            .insert("source".to_string(), "go.sum".to_string());
-                        pkg.source_file = Some(file.path.display().to_string());
-                        let key = format!("{}@{}", pkg.name, pkg.version);
-                        if manifest_seen.insert(key) {
-                            packages.push(pkg);
-                        }
+                && let Some(text) = file.as_text()
+            {
+                for mut pkg in parse_go_sum(text)? {
+                    pkg.metadata
+                        .insert("source".to_string(), "go.sum".to_string());
+                    pkg.source_file = Some(file.path.display().to_string());
+                    let key = format!("{}@{}", pkg.name, pkg.version);
+                    if manifest_seen.insert(key) {
+                        packages.push(pkg);
                     }
                 }
+            }
         }
 
         // Go binary scans: preserve per-binary attribution.

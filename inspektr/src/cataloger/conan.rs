@@ -29,15 +29,16 @@ impl Cataloger for ConanCataloger {
         for file in files {
             let file_name = file.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if file_name == "conan.lock"
-                && let Some(text) = file.as_text() {
-                    for mut pkg in parse_conan_lock(text)? {
-                        pkg.source_file = Some(file.path.display().to_string());
-                        let key = format!("{}@{}", pkg.name, pkg.version);
-                        if seen.insert(key) {
-                            packages.push(pkg);
-                        }
+                && let Some(text) = file.as_text()
+            {
+                for mut pkg in parse_conan_lock(text)? {
+                    pkg.source_file = Some(file.path.display().to_string());
+                    let key = format!("{}@{}", pkg.name, pkg.version);
+                    if seen.insert(key) {
+                        packages.push(pkg);
                     }
                 }
+            }
         }
 
         Ok(packages)

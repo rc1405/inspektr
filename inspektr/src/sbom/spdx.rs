@@ -185,13 +185,14 @@ impl SbomFormat for SpdxFormat {
                         continue;
                     }
                     if let Some(rest) = ann.comment.strip_prefix("inspektr:")
-                        && let Some((key, value)) = rest.split_once('=') {
-                            if key == "source_file" {
-                                source_file = Some(value.to_string());
-                            } else {
-                                metadata.insert(key.to_string(), value.to_string());
-                            }
+                        && let Some((key, value)) = rest.split_once('=')
+                    {
+                        if key == "source_file" {
+                            source_file = Some(value.to_string());
+                        } else {
+                            metadata.insert(key.to_string(), value.to_string());
                         }
+                    }
                 }
 
                 Package {

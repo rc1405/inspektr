@@ -77,10 +77,12 @@ pub fn resolve_cpe(cpe: &str) -> Option<ResolvedCpe> {
     let fields = parse_cpe(cpe)?;
 
     // Try target_sw first (skip wildcard / not-applicable values)
-    if fields.target_sw != "*" && fields.target_sw != "-"
-        && let Some(resolved) = resolve_by_target_sw(&fields) {
-            return Some(resolved);
-        }
+    if fields.target_sw != "*"
+        && fields.target_sw != "-"
+        && let Some(resolved) = resolve_by_target_sw(&fields)
+    {
+        return Some(resolved);
+    }
 
     // Fall back to vendor heuristics
     resolve_by_vendor(&fields)

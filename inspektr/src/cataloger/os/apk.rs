@@ -31,10 +31,11 @@ impl OsPackageParser for ApkParser {
             let path_str = file.path.to_string_lossy();
             if (path_str.ends_with("/lib/apk/db/installed") || path_str == "lib/apk/db/installed")
                 && let Some(text) = file.as_text()
-                    && text.len() > best_len {
-                        best = Some(text);
-                        best_len = text.len();
-                    }
+                && text.len() > best_len
+            {
+                best = Some(text);
+                best_len = text.len();
+            }
         }
         match best {
             Some(text) => parse_apk_installed(text, distro),

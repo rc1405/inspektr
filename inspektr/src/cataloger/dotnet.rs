@@ -91,9 +91,10 @@ pub fn parse_packages_lock_json(content: &str) -> Result<Vec<Package>, Cataloger
             if let Some(pkgs) = pkg_map.as_object() {
                 for (name, info) in pkgs {
                     if let Some(version) = info.get("resolved").and_then(|v| v.as_str())
-                        && !version.is_empty() {
-                            packages.push(make_dotnet_package(name, version));
-                        }
+                        && !version.is_empty()
+                    {
+                        packages.push(make_dotnet_package(name, version));
+                    }
                 }
             }
         }
@@ -115,10 +116,11 @@ pub fn parse_csproj(content: &str) -> Result<Vec<Package>, CatalogerError> {
         if let (Some(name), Some(version)) = (
             extract_attr(trimmed, "Include"),
             extract_attr(trimmed, "Version"),
-        )
-            && !name.is_empty() && !version.is_empty() {
-                packages.push(make_dotnet_package(&name, &version));
-            }
+        ) && !name.is_empty()
+            && !version.is_empty()
+        {
+            packages.push(make_dotnet_package(&name, &version));
+        }
     }
 
     Ok(packages)
@@ -137,10 +139,11 @@ pub fn parse_packages_config(content: &str) -> Result<Vec<Package>, CatalogerErr
         if let (Some(name), Some(version)) = (
             extract_attr(trimmed, "id"),
             extract_attr(trimmed, "version"),
-        )
-            && !name.is_empty() && !version.is_empty() {
-                packages.push(make_dotnet_package(&name, &version));
-            }
+        ) && !name.is_empty()
+            && !version.is_empty()
+        {
+            packages.push(make_dotnet_package(&name, &version));
+        }
     }
 
     Ok(packages)

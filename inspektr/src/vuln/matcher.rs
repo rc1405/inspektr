@@ -268,16 +268,17 @@ fn match_os_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityMa
         .filter(|s| s.as_str() != "linux" || package.name.starts_with("linux-image"));
     let mut source_result_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     if let Some(src) = source_pkg
-        && let Ok(source_results) = store.query(&ecosystem, src) {
-            let seen: std::collections::HashSet<String> =
-                query_results.iter().map(|r| r.id.clone()).collect();
-            for r in source_results {
-                if !seen.contains(&r.id) {
-                    source_result_ids.insert(r.id.clone());
-                    query_results.push(r);
-                }
+        && let Ok(source_results) = store.query(&ecosystem, src)
+    {
+        let seen: std::collections::HashSet<String> =
+            query_results.iter().map(|r| r.id.clone()).collect();
+        for r in source_results {
+            if !seen.contains(&r.id) {
+                source_result_ids.insert(r.id.clone());
+                query_results.push(r);
             }
         }
+    }
 
     let pkg_version = strip_epoch(&package.version);
 
@@ -306,9 +307,10 @@ fn match_os_package(store: &VulnStore, package: &Package) -> Vec<VulnerabilityMa
             if is_after_introduced && is_before_fixed {
                 let mut matched_pkg = package.clone();
                 if source_result_ids.contains(&result.id)
-                    && let Some(src) = source_pkg {
-                        matched_pkg.name = src.clone();
-                    }
+                    && let Some(src) = source_pkg
+                {
+                    matched_pkg.name = src.clone();
+                }
                 matches.push(VulnerabilityMatch {
                     package: matched_pkg,
                     vulnerability: crate::models::Vulnerability {
