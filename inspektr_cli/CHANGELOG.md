@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9](https://github.com/rc1405/inspektr/compare/inspektr_cli-v0.1.8...inspektr_cli-v0.1.9) - 2026-05-01
+
+### Added
+
+- added benchmarks and fixes
+
+### Other
+
+- fmt
+
 ## [0.1.8](https://github.com/rc1405/inspektr/compare/inspektr_cli-v0.1.7...inspektr_cli-v0.1.8) - 2026-04-11
 
 ### Added
