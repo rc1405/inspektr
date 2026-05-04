@@ -58,7 +58,7 @@ jobs:
         run: python3 benchmarks/04-report.py
 
       - name: Upload reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-reports-${{ github.run_number }}
           path: benchmarks/results/reports/
